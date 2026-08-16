@@ -631,7 +631,7 @@ export async function fetchAllUsers(): Promise<User[]> {
 
 export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
   const users = await fetchAllUsers();
-  const validUserIds = new Set(users.map(u => u.id));
+  const existingUsersMap = new Map<string, User>(users.map(u => [u.id, u]));
 
   if (isSupabaseActive()) {
     try {
@@ -642,9 +642,29 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
       const { data, error } = await query;
       if (!error && data) {
         if (data.length > 0) {
-          const cloudCheckins: Checkin[] = data
-            .filter(d => validUserIds.has(d.user_id))
-            .map(d => ({
+          const cloudCheckins: Checkin[] = data.map(d => {
+            // Auto-reconstruct user profile if missing from users list
+            if (d.user_id && !existingUsersMap.has(d.user_id)) {
+              const reconstructedUser: User = {
+                id: d.user_id,
+                role: 'tnv',
+                fullName: d.full_name || 'TNV Mới',
+                email: `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+                phone: '0000000000',
+                department: d.department || 'Hậu cần',
+                eventId: d.event_id || '',
+                eventName: d.event_name || '',
+                salaryRate: getDepartmentRate(d.department || 'Hậu cần'),
+                createdAt: Number(d.created_at) || Date.now(),
+                updatedAt: Date.now(),
+              };
+              existingUsersMap.set(d.user_id, reconstructedUser);
+              users.push(reconstructedUser);
+              saveLocalUsers(users);
+              safeSupabaseUpsertUser(reconstructedUser);
+            }
+
+            return {
               id: d.id,
               userId: d.user_id,
               fullName: d.full_name,
@@ -661,7 +681,8 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
               checkoutTime: d.checkout_time ? Number(d.checkout_time) : undefined,
               createdAt: Number(d.created_at),
               updatedAt: Number(d.updated_at),
-            }));
+            };
+          });
 
           const localCheckins = getLocalCheckins();
           const mergedMap = new Map<string, Checkin>();
@@ -699,7 +720,7 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
     }
   }
 
-  const localCheckins = getLocalCheckins().filter(c => validUserIds.has(c.userId));
+  const localCheckins = getLocalCheckins();
   if (userId) {
     return localCheckins.filter(c => c.userId === userId);
   }
