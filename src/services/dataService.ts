@@ -1,5 +1,5 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from '../supabase';
-import { User, Checkin } from '../types';
+import { User, Checkin, EventItem } from '../types';
 import { format } from 'date-fns';
 import { sendApprovalEmailNotification, getAdminEmailSettings } from './emailService';
 import { pushGlobalCloudData, pullGlobalCloudData } from './cloudSyncService';
@@ -9,6 +9,42 @@ const LOCAL_CHECKINS_KEY = 'app_checkins_data_v1';
 const LOCAL_SESSION_KEY = 'app_session_user_v1';
 const STORAGE_MODE_KEY = 'app_storage_mode_preference';
 const CUSTOM_DEPARTMENTS_KEY = 'app_custom_departments_v1';
+const CUSTOM_EVENTS_KEY = 'app_custom_events_v1';
+
+export const DEFAULT_EVENTS: EventItem[] = [
+  {
+    id: 'evt-default-1',
+    name: 'Sự Kiện Mặc Định 2026',
+    startDate: '2026-08-01',
+    endDate: '2026-12-31',
+    location: 'TP. Hồ Chí Minh',
+    status: 'active',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }
+];
+
+export function getEventsList(): EventItem[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_EVENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch {}
+  return DEFAULT_EVENTS;
+}
+
+export function getActiveEventsList(): EventItem[] {
+  return getEventsList().filter(e => e.status === 'active');
+}
+
+export function saveEventsList(events: EventItem[]): void {
+  localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(events));
+  triggerCloudSync();
+}
 
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -533,7 +569,9 @@ export async function submitScheduleRegistration(
   shiftName: string, 
   otHours: number = 0,
   notes?: string,
-  targetDepartment?: string
+  targetDepartment?: string,
+  eventId?: string,
+  eventName?: string
 ): Promise<Checkin> {
   const chosenDepartment = targetDepartment || user.department;
   const deptRate = getDepartmentRate(chosenDepartment);
@@ -553,6 +591,8 @@ export async function submitScheduleRegistration(
     userId: user.id,
     fullName: user.fullName,
     department: chosenDepartment,
+    eventId,
+    eventName,
     workDate,
     shiftName,
     otHours,
@@ -875,6 +915,39 @@ export async function deleteCheckinItem(checkinId: string): Promise<{ success: b
   }
 
   return { success: true };
+}
+
+export async function updateCheckinShiftDetails(checkinId: string, updates: Partial<Checkin>): Promise<void> {
+  const checkins = getLocalCheckins();
+  const target = checkins.find(c => c.id === checkinId);
+  if (target) {
+    if (updates.workDate !== undefined) target.workDate = updates.workDate;
+    if (updates.shiftName !== undefined) target.shiftName = updates.shiftName;
+    if (updates.otHours !== undefined) target.otHours = updates.otHours;
+    if (updates.department !== undefined) target.department = updates.department;
+    if (updates.eventId !== undefined) target.eventId = updates.eventId;
+    if (updates.eventName !== undefined) target.eventName = updates.eventName;
+    if (updates.adminNote !== undefined) target.adminNote = updates.adminNote;
+    if (updates.status !== undefined) target.status = updates.status;
+    target.updatedAt = Date.now();
+    saveLocalCheckins(checkins);
+    await triggerCloudSync();
+  }
+
+  if (isSupabaseActive() && isValidUUID(checkinId)) {
+    try {
+      const updatePayload: any = { updated_at: Date.now() };
+      if (updates.workDate !== undefined) updatePayload.work_date = updates.workDate;
+      if (updates.shiftName !== undefined) updatePayload.shift_name = updates.shiftName;
+      if (updates.otHours !== undefined) updatePayload.ot_hours = updates.otHours;
+      if (updates.department !== undefined) updatePayload.department = updates.department;
+      if (updates.adminNote !== undefined) updatePayload.admin_note = updates.adminNote;
+      if (updates.status !== undefined) updatePayload.status = updates.status;
+      await supabase.from('checkins').update(updatePayload).eq('id', checkinId);
+    } catch (e) {
+      console.warn("Supabase update shift notice:", e);
+    }
+  }
 }
 
 export async function bulkApproveCheckinsList(checkinIds: string[]): Promise<void> {

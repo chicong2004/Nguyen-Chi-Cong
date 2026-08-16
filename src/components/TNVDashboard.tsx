@@ -1,7 +1,5 @@
-import React, { useEffect, useState } from 'react';
-import { useAuth } from './AuthContext';
-import { Checkin, User } from '../types';
-import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate } from '../services/dataService';
+import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate, getActiveEventsList } from '../services/dataService';
+import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
 import QRScannerModal from './QRScannerModal';
 
@@ -14,7 +12,9 @@ export default function TNVDashboard() {
 
   // Registration Form State
   const [departmentsList, setDepartmentsList] = useState<string[]>([]);
+  const [eventsList, setEventsList] = useState<EventItem[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState(userProfile?.department || 'Hậu cần');
+  const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedShift, setSelectedShift] = useState('Ca Sáng (07:00 - 12:00)');
   const [otHours, setOtHours] = useState<number>(0);
@@ -49,6 +49,12 @@ export default function TNVDashboard() {
     const deps = getDepartmentsList();
     setDepartmentsList(deps);
 
+    const evts = getActiveEventsList();
+    setEventsList(evts);
+    if (evts.length > 0 && !selectedEventId) {
+      setSelectedEventId(evts[0].id);
+    }
+
     // Auto refresh every 10 seconds to sync Admin salary updates & approval statuses in real-time!
     const timer = setInterval(loadUserData, 10000);
     return () => clearInterval(timer);
@@ -69,13 +75,16 @@ export default function TNVDashboard() {
     setSuccessMessage('');
 
     try {
+      const selectedEvt = eventsList.find(evt => evt.id === selectedEventId);
       await submitScheduleRegistration(
         activeProfile, 
         selectedDate, 
         selectedShift, 
         Number(otHours), 
         notes,
-        selectedDepartment
+        selectedDepartment,
+        selectedEvt?.id,
+        selectedEvt?.name
       );
       setSuccessMessage(`Đã gửi đăng ký lịch làm việc ca (${selectedDepartment} - ${selectedDate} - ${selectedShift})! Đang chờ Admin duyệt.`);
       setNotes('');
@@ -179,6 +188,22 @@ export default function TNVDashboard() {
           )}
 
           <form onSubmit={handleScheduleSubmit} className="space-y-4">
+            {eventsList.length > 0 && (
+              <div>
+                <label className="block text-xs font-bold text-gray-700 mb-1">🎉 Chọn Sự Kiện Đăng Ký Ca:</label>
+                <select
+                  value={selectedEventId}
+                  onChange={(e) => setSelectedEventId(e.target.value)}
+                  className="w-full px-3.5 py-2.5 border border-purple-300 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500 bg-purple-50/40 text-purple-900"
+                >
+                  {eventsList.map(evt => (
+                    <option key={evt.id} value={evt.id}>
+                      {evt.name} ({evt.startDate} đến {evt.endDate})
+                    </option>
+                  ))}
+                </select>
+              </div>
+            )}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
                 <span>🏢 Chọn / Đổi Bộ Phận Công Tác Cho Ca Này:</span>

@@ -22,6 +22,9 @@ import AdminEditUserModal from './AdminEditUserModal';
 import AdminDailyQRModal from './AdminDailyQRModal';
 import AdminDepartmentModal from './AdminDepartmentModal';
 import AdminSettingsModal from './AdminSettingsModal';
+import AdminEventModal from './AdminEventModal';
+import AdminUserDetailModal from './AdminUserDetailModal';
+import { getEventsList } from '../services/dataService';
 
 export default function AdminDashboard() {
   const { logout, isLocalStorageMode } = useAuth();
@@ -29,18 +32,22 @@ export default function AdminDashboard() {
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [departmentsList, setDepartmentsList] = useState<string[]>(getDepartmentsList());
   const [adminSettings, setAdminSettings] = useState(getAdminEmailSettings());
+  const [eventsList, setEventsList] = useState(getEventsList());
   const [loading, setLoading] = useState(true);
   
   // Modals
   const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [selectedDetailUser, setSelectedDetailUser] = useState<User | null>(null);
   const [isDailyQROpen, setIsDailyQROpen] = useState(false);
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<string>('Tất cả');
+  const [selectedEventFilter, setSelectedEventFilter] = useState<string>('all');
 
   // Selected checkins for bulk approve
   const [selectedCheckins, setSelectedCheckins] = useState<Set<string>>(new Set());
@@ -58,6 +65,7 @@ export default function AdminDashboard() {
 
       setDepartmentsList(getDepartmentsList());
       setAdminSettings(getAdminEmailSettings());
+      setEventsList(getEventsList());
     } catch (err) {
       console.error("Lỗi lấy dữ liệu Admin:", err);
     } finally {
@@ -80,13 +88,22 @@ export default function AdminDashboard() {
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
       const matchesTab = activeTab === 'Tất cả' || u.department === activeTab;
-      const matchesSearch = 
-        u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        u.phone.includes(searchTerm) ||
-        u.email.toLowerCase().includes(searchTerm.toLowerCase());
-      return matchesTab && matchesSearch;
+      const term = searchTerm.toLowerCase();
+      const matchesSearch = !searchTerm || (
+        u.fullName.toLowerCase().includes(term) ||
+        u.email.toLowerCase().includes(term) ||
+        u.phone.includes(term)
+      );
+
+      let matchesEvent = true;
+      if (selectedEventFilter !== 'all') {
+        const userEventCheckins = checkins.filter(c => c.userId === u.id && c.eventId === selectedEventFilter);
+        matchesEvent = userEventCheckins.length > 0;
+      }
+
+      return matchesTab && matchesSearch && matchesEvent;
     });
-  }, [users, activeTab, searchTerm]);
+  }, [users, checkins, activeTab, searchTerm, selectedEventFilter]);
 
   // Metrics
   const totalApprovedCheckins = checkins.filter(c => c.status === 'approved').length;
@@ -255,6 +272,18 @@ export default function AdminDashboard() {
         onClose={() => setIsDeptModalOpen(false)} 
         onSaved={loadAllData} 
       />
+      <AdminEventModal
+        isOpen={isEventModalOpen}
+        onClose={() => setIsEventModalOpen(false)}
+        onEventsUpdated={loadAllData}
+      />
+      <AdminUserDetailModal
+        user={selectedDetailUser}
+        checkins={checkins}
+        isOpen={Boolean(selectedDetailUser)}
+        onClose={() => setSelectedDetailUser(null)}
+        onDataChanged={loadAllData}
+      />
       <AdminSettingsModal
         isOpen={isSettingsOpen}
         onClose={() => setIsSettingsOpen(false)}
@@ -281,6 +310,13 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setIsEventModalOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1"
+            >
+              🎉 Quản Lý Sự Kiện
+            </button>
+
             <button
               onClick={() => setIsSettingsOpen(true)}
               className="px-3.5 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1"
@@ -366,22 +402,36 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Search & Department Tabs */}
+        {/* Search & Department Tabs & Event Filter */}
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex space-x-1 overflow-x-auto w-full md:w-auto pb-1 scrollbar-hide">
-            {departments.map(dep => (
-              <button
-                key={dep}
-                onClick={() => setActiveTab(dep)}
-                className={`px-4 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition ${
-                  activeTab === dep 
-                    ? 'bg-gray-900 text-white shadow-sm' 
-                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
-                }`}
-              >
-                {dep}
-              </button>
-            ))}
+          <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
+            {/* Event Filter */}
+            <select
+              value={selectedEventFilter}
+              onChange={(e) => setSelectedEventFilter(e.target.value)}
+              className="px-3 py-2 border border-purple-300 bg-purple-50 text-purple-900 font-bold rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
+            >
+              <option value="all">🎉 Tất cả sự kiện ({eventsList.length})</option>
+              {eventsList.map(evt => (
+                <option key={evt.id} value={evt.id}>{evt.name}</option>
+              ))}
+            </select>
+
+            <div className="flex space-x-1 overflow-x-auto pb-1 scrollbar-hide">
+              {departments.map(dep => (
+                <button
+                  key={dep}
+                  onClick={() => setActiveTab(dep)}
+                  className={`px-3 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition ${
+                    activeTab === dep 
+                      ? 'bg-gray-900 text-white shadow-sm' 
+                      : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  }`}
+                >
+                  {dep}
+                </button>
+              ))}
+            </div>
           </div>
 
           <div className="w-full md:w-80 flex items-center gap-2">
@@ -406,8 +456,8 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
             <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-              📋 Bảng Quản Lý Dữ Liệu Lịch Làm Việc & Điểm Danh (Đồng Bộ Thiết Bị)
-              <span className="text-xs font-normal bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-full">
+              📋 Danh Sách TNV & CTV Đăng Ký Theo Sự Kiện
+              <span className="text-xs font-normal bg-purple-100 text-purple-800 font-bold px-2.5 py-0.5 rounded-full">
                 {filteredUsers.length} người
               </span>
             </h3>
@@ -424,7 +474,7 @@ export default function AdminDashboard() {
 
           {filteredUsers.length === 0 ? (
             <div className="p-12 text-center text-gray-400 text-sm">
-              Không tìm thấy TNV nào phù hợp trong hệ thống.
+              Không tìm thấy TNV nào phù hợp trong sự kiện này.
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -433,10 +483,10 @@ export default function AdminDashboard() {
                   <tr>
                     <th className="px-4 py-3">Họ và Tên / Liên hệ</th>
                     <th className="px-4 py-3">Bộ phận (Edit trực tiếp)</th>
-                    <th className="px-4 py-3 text-right">Phụ cấp/ca (Sửa đồng bộ TNV)</th>
+                    <th className="px-4 py-3 text-right">Phụ cấp/ca</th>
                     <th className="px-4 py-3 text-center">Ca đã duyệt</th>
                     <th className="px-4 py-3 text-right">Tổng phụ cấp (VND)</th>
-                    <th className="px-4 py-3">Lịch đăng ký, QR Check-in/out & Note Admin</th>
+                    <th className="px-4 py-3 text-center">Chi tiết & Ca làm việc</th>
                     <th className="px-4 py-3 text-center">Thao tác</th>
                   </tr>
                 </thead>
@@ -446,24 +496,25 @@ export default function AdminDashboard() {
                     const approvedCheckins = userCheckins.filter(c => c.status === 'approved');
                     const approvedCount = approvedCheckins.length;
                     const totalOTHours = approvedCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);
-                    const userTotalSalary = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, user.salaryRate, c.otHours), 0);
+                    const userTotalSalary = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName || '', user.salaryRate, c.otHours), 0);
 
                     return (
                       <tr key={user.id} className="hover:bg-blue-50/30 transition">
                         {/* Name & Contact */}
-                        <td className="px-4 py-3 align-top">
-                          <div className="font-bold text-gray-900 text-sm">{user.fullName}</div>
-                          <div className="text-gray-500 mt-0.5">📱 {user.phone}</div>
-                          <div className="text-gray-400 text-[11px]">📧 {user.email}</div>
-                          {user.facebookLink && (
-                            <a href={user.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-[11px] block mt-0.5">
-                              🔗 Facebook/Zalo
-                            </a>
-                          )}
+                        <td className="px-4 py-3 align-middle">
+                          <div className="flex items-center gap-3">
+                            <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-black text-sm flex items-center justify-center shadow-xs shrink-0">
+                              {user.fullName.charAt(0).toUpperCase()}
+                            </div>
+                            <div>
+                              <div className="font-bold text-gray-900 text-sm">{user.fullName}</div>
+                              <div className="text-gray-500 text-[11px]">📱 {user.phone} &bull; 📧 {user.email}</div>
+                            </div>
+                          </div>
                         </td>
 
                         {/* Inline Department Select */}
-                        <td className="px-4 py-3 align-top">
+                        <td className="px-4 py-3 align-middle">
                           <select
                             value={user.department}
                             onChange={(e) => handleDepartmentChangeInline(user.id, e.target.value)}
@@ -476,7 +527,7 @@ export default function AdminDashboard() {
                         </td>
 
                         {/* Inline Salary Input */}
-                        <td className="px-4 py-3 text-right align-top">
+                        <td className="px-4 py-3 text-right align-middle">
                           <input
                             type="number"
                             step={5000}
@@ -488,19 +539,19 @@ export default function AdminDashboard() {
                         </td>
 
                         {/* Approved count */}
-                        <td className="px-4 py-3 text-center align-top font-bold text-sm">
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 block">
+                        <td className="px-4 py-3 text-center align-middle font-bold text-sm">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 inline-block">
                             {approvedCount} ca
                           </span>
                           {totalOTHours > 0 && (
-                            <span className="text-[10px] text-purple-700 font-bold block mt-1">
+                            <span className="text-[10px] text-purple-700 font-bold block mt-0.5">
                               +{totalOTHours}h OT
                             </span>
                           )}
                         </td>
 
                         {/* Total Salary */}
-                        <td className="px-4 py-3 text-right align-top font-black text-emerald-600 text-sm">
+                        <td className="px-4 py-3 text-right align-middle font-black text-emerald-600 text-sm">
                           <div>{userTotalSalary.toLocaleString()} VND</div>
                           {totalOTHours > 0 && (
                             <span className="text-[10px] text-purple-600 font-bold block">
@@ -509,128 +560,28 @@ export default function AdminDashboard() {
                           )}
                         </td>
 
-                        {/* Schedules & QR Checkin/Checkout logs + Admin Notes */}
-                        <td className="px-4 py-3 align-top">
-                          {userCheckins.length === 0 ? (
-                            <span className="text-gray-400 italic text-[11px]">Chưa có lịch đăng ký nào</span>
-                          ) : (
-                            <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                              {userCheckins.map(ci => {
-                                const isFullDay = (ci.shiftName || '').includes('Cả Ngày') || (ci.shiftName || '').toLowerCase().includes('full');
-                                const shiftPay = calculateShiftPay(ci.shiftName, user.salaryRate, ci.otHours);
-                                return (
-                                  <div key={ci.id} className="p-2 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
-                                    <div className="flex items-center justify-between font-bold text-gray-900 text-xs gap-1">
-                                      <span className="truncate">📅 {ci.workDate || format(ci.createdAt, 'dd/MM/yyyy')}: {ci.shiftName}</span>
-                                      <div className="flex items-center gap-1 shrink-0">
-                                        {isFullDay && (
-                                          <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded font-extrabold">
-                                            ⚡ 2x Cả Ngày
-                                          </span>
-                                        )}
-                                        {ci.otHours ? (
-                                          <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.2 rounded font-extrabold">
-                                            +{ci.otHours}h OT (+{(ci.otHours * 25000).toLocaleString()}đ)
-                                          </span>
-                                        ) : null}
-                                      </div>
-                                    </div>
-                                    <div className="text-[10px] text-emerald-700 font-bold">
-                                      Thù lao ca này: {shiftPay.toLocaleString()} VND {isFullDay ? '(2x Lương)' : ''} {ci.otHours ? `(Cộng +${(ci.otHours * 25000).toLocaleString()}đ OT)` : ''}
-                                    </div>
-
-                                  {/* Check-in & Check-out Automatic Data */}
-                                  <div className="flex items-center gap-3 text-[11px] text-gray-500">
-                                    <span>📍 In: {ci.checkinTime ? format(ci.checkinTime, 'HH:mm') : 'Chưa quét'}</span>
-                                    <span>🏁 Out: {ci.checkoutTime ? format(ci.checkoutTime, 'HH:mm') : 'Chưa quét'}</span>
-                                  </div>
-
-                                  {/* Admin Note Inline Edit */}
-                                  <div className="flex items-center gap-1.5 mt-1">
-                                    <span className="text-[10px] text-gray-400">Note Admin:</span>
-                                    <input
-                                      type="text"
-                                      defaultValue={ci.adminNote || ''}
-                                      onBlur={(e) => handleAdminNoteChange(ci.id, e.target.value)}
-                                      placeholder="Nhập ghi chú Admin..."
-                                      className="flex-1 px-2 py-0.5 text-[11px] border border-gray-300 rounded bg-white outline-none focus:ring-1 focus:ring-blue-500"
-                                    />
-                                  </div>
-
-                                  <div className="flex items-center justify-between pt-1 border-t border-gray-200/60 mt-1">
-                                    <div className="flex items-center gap-1">
-                                      {ci.status === 'pending' && (
-                                        <>
-                                          <button
-                                            onClick={() => handleApproveSingle(ci)}
-                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] transition"
-                                          >
-                                            ✓ Duyệt & Mail
-                                          </button>
-                                          <button
-                                            onClick={() => handleRejectSingle(ci)}
-                                            className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded text-[10px] transition"
-                                          >
-                                            ✕ Từ Chối
-                                          </button>
-                                        </>
-                                      )}
-                                      {ci.status === 'approved' && (
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-emerald-600 font-bold text-[10px] flex items-center gap-1">
-                                            ✓ Đã duyệt 📧 Email
-                                          </span>
-                                          <button
-                                            onClick={() => handleRejectSingle(ci)}
-                                            className="px-1.5 py-0.2 bg-gray-100 text-gray-600 hover:bg-gray-200 font-semibold rounded text-[9px]"
-                                          >
-                                            Đổi từ chối
-                                          </button>
-                                        </div>
-                                      )}
-                                      {ci.status === 'rejected' && (
-                                        <div className="flex items-center gap-1">
-                                          <span className="text-red-600 font-bold text-[10px]">
-                                            ❌ Đã Từ Chối
-                                          </span>
-                                          <button
-                                            onClick={() => handleApproveSingle(ci)}
-                                            className="px-1.5 py-0.2 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold rounded text-[9px]"
-                                          >
-                                            Duyệt lại
-                                          </button>
-                                        </div>
-                                      )}
-                                    </div>
-
-                                    <button
-                                      onClick={() => handleDeleteSingleCheckin(ci)}
-                                      className="px-1.5 py-0.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded font-bold text-[10px] transition flex items-center gap-0.5"
-                                      title="Xóa ca làm này"
-                                    >
-                                      🗑️ Xóa ca
-                                    </button>
-                                  </div>
-                                </div>
-                              );
-                            })}
-                            </div>
-                          )}
+                        {/* Clean Detail Action Button */}
+                        <td className="px-4 py-3 text-center align-middle">
+                          <button
+                            onClick={() => setSelectedDetailUser(user)}
+                            className="px-3.5 py-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center justify-center gap-1.5 mx-auto"
+                          >
+                            👁️ Xem & Sửa Ca Làm ({userCheckins.length})
+                          </button>
                         </td>
-
                         {/* Actions */}
-                        <td className="px-4 py-3 text-center align-top space-x-1">
+                        <td className="px-4 py-3 text-center align-middle space-x-1">
                           <button
                             onClick={() => setEditingUser(user)}
                             className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
-                            title="Sửa chi tiết"
+                            title="Sửa thông tin cá nhân"
                           >
                             ✏️
                           </button>
                           <button
                             onClick={() => handleDeleteUser(user.id, user.fullName)}
                             className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
-                            title="Xoá TNV"
+                            title="Xoá TNV khỏi hệ thống"
                           >
                             🗑️
                           </button>

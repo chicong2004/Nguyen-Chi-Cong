@@ -1,5 +1,16 @@
 export type Role = 'admin' | 'tnv';
 
+export interface EventItem {
+  id: string;
+  name: string;
+  startDate: string; // YYYY-MM-DD
+  endDate: string;   // YYYY-MM-DD
+  location?: string;
+  status: 'active' | 'archived'; // active = Mở cho TNV đăng ký
+  createdAt: number;
+  updatedAt: number;
+}
+
 export interface User {
   id: string;
   role: Role;
@@ -19,10 +30,12 @@ export interface Checkin {
   userId: string;
   fullName: string;
   department: string;
+  eventId?: string;
+  eventName?: string;
   workDate?: string; // YYYY-MM-DD
-  shiftName?: string; // e.g. "Ca Sáng (07:00 - 12:00)", "Ca Chiều (13:00 - 17:30)", "Ca Tối / OT (18:00 - 22:00)"
+  shiftName?: string; // e.g. "Ca Sáng (07:00 - 12:00)", "Ca Chiều (13:00 - 17:30)", "Ca Tối / OT (18:00 - 22:00)", "Ca Cả Ngày (07:00 - 17:30)"
   otHours?: number; // Số giờ OT làm thêm
-  status: 'pending' | 'approved';
+  status: 'pending' | 'approved' | 'rejected';
   checkinTime?: number;
   checkoutTime?: number;
   type?: 'checkin' | 'checkout' | 'full';
