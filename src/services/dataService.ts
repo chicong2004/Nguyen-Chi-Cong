@@ -265,11 +265,20 @@ export async function syncToGoogleSheets(customUsers?: User[], customCheckins?: 
   try {
     const users = customUsers || getLocalUsers();
     const checkins = customCheckins || getLocalCheckins();
+
+    const enrichedUsers = users.map(u => {
+      const approved = checkins.filter(c => c.userId === u.id && c.status === 'approved');
+      const totalEarned = approved.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, u.salaryRate, c.otHours), 0);
+      return {
+        ...u,
+        totalEarned,
+      };
+    });
     
     await fetch(GOOGLE_SHEETS_WEBAPP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify({ users, checkins }),
+      body: JSON.stringify({ users: enrichedUsers, checkins }),
     });
   } catch (err) {
     console.warn("Google Sheets sync notice:", err);
