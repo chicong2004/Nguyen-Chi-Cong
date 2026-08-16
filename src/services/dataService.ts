@@ -1138,7 +1138,7 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
 
   if (isSupabaseActive() && isValidUUID(userId)) {
     try {
-      const updatePayload: any = { updated_at: Date.now() };
+      const updatePayload: any = {};
       if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
       if (data.email !== undefined) updatePayload.email = data.email;
       if (data.phone !== undefined) updatePayload.phone = data.phone;
@@ -1166,7 +1166,7 @@ export async function updateCheckinAdminNote(checkinId: string, adminNote: strin
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
-      await supabase.from('checkins').update({ admin_note: adminNote, updated_at: Date.now() }).eq('id', checkinId);
+      await supabase.from('checkins').update({ admin_note: adminNote }).eq('id', checkinId);
     } catch (e) {
       console.warn("Supabase update admin note notice:", e);
     }
@@ -1206,7 +1206,7 @@ export async function approveCheckinItem(checkinId: string): Promise<{ success: 
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
-      const updatePayload: any = { status: 'approved', updated_at: Date.now() };
+      const updatePayload: any = { status: 'approved' };
       if (target?.checkinTime) updatePayload.checkin_time = target.checkinTime;
       if (target?.checkoutTime) updatePayload.checkout_time = target.checkoutTime;
       await supabase.from('checkins').update(updatePayload).eq('id', checkinId);
@@ -1230,7 +1230,7 @@ export async function rejectCheckinItem(checkinId: string): Promise<{ success: b
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
-      await supabase.from('checkins').update({ status: 'rejected', updated_at: Date.now() }).eq('id', checkinId);
+      await supabase.from('checkins').update({ status: 'rejected' }).eq('id', checkinId);
     } catch (e) {
       console.warn("Supabase reject notice:", e);
     }
