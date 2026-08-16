@@ -89,6 +89,18 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
 ];
 
 const SYSTEM_DEPTS_ID = '00000000-0000-4000-8000-000000000099';
+const DEPARTMENT_RATES_KEY = 'app_department_rates_v1';
+
+const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
+  'Hậu cần': 50000,
+  'Truyền thông': 60000,
+  'Sự kiện': 50000,
+  'Tài trợ': 50000,
+  'Nhân sự': 50000,
+  'Cửu vạn': 150000,
+  'Lễ Tân': 70000,
+  'Backstage': 80000,
+};
 
 export function getDepartmentsList(): string[] {
   const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
@@ -104,15 +116,48 @@ export function getDepartmentsList(): string[] {
   return defaultDeps;
 }
 
+export function getDepartmentRates(): Record<string, number> {
+  try {
+    const raw = localStorage.getItem(DEPARTMENT_RATES_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (typeof parsed === 'object' && parsed !== null) {
+        return { ...DEFAULT_DEPARTMENT_RATES, ...parsed };
+      }
+    }
+  } catch {}
+  return DEFAULT_DEPARTMENT_RATES;
+}
+
+export function getDepartmentRate(deptName: string): number {
+  const rates = getDepartmentRates();
+  if (rates[deptName] !== undefined) {
+    return Number(rates[deptName]) || 50000;
+  }
+  return 50000;
+}
+
+export function saveDepartmentRates(rates: Record<string, number>) {
+  saveDepartmentsAndRates(getDepartmentsList(), rates);
+}
+
 export function saveDepartmentsList(deps: string[]) {
+  saveDepartmentsAndRates(deps, getDepartmentRates());
+}
+
+export function saveDepartmentsAndRates(deps: string[], rates?: Record<string, number>) {
+  const currentRates = rates || getDepartmentRates();
   localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(deps));
+  localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(currentRates));
+
   if (isSupabaseActive()) {
+    const payloadStr = JSON.stringify({ deps, rates: currentRates });
     supabase.from('users').upsert({
       id: SYSTEM_DEPTS_ID,
       role: 'admin',
       full_name: '__SYSTEM_DEPARTMENTS__',
       phone: '0000000000',
-      department: JSON.stringify(deps),
+      department: payloadStr,
       salary_rate: 0,
       created_at: Date.now(),
       updated_at: Date.now(),
@@ -256,7 +301,7 @@ export async function registerTNV(payload: {
     facebookLink: payload.facebookLink || '',
     department: payload.department,
     notes: payload.notes || '',
-    salaryRate: 50000,
+    salaryRate: getDepartmentRate(payload.department),
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -337,6 +382,13 @@ export async function fetchAllUsers(): Promise<User[]> {
             const parsed = JSON.parse(sysRec.department);
             if (Array.isArray(parsed) && parsed.length > 0) {
               localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(parsed));
+            } else if (typeof parsed === 'object' && parsed !== null) {
+              if (Array.isArray(parsed.deps)) {
+                localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(parsed.deps));
+              }
+              if (typeof parsed.rates === 'object' && parsed.rates !== null) {
+                localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(parsed.rates));
+              }
             }
           } catch {}
         }

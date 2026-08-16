@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { registerTNV, loginTNV, getDepartmentsList } from '../services/dataService';
+import { registerTNV, loginTNV, getDepartmentsList, getDepartmentRate } from '../services/dataService';
 
 interface TNVLoginProps {
   initialIsLogin?: boolean;
@@ -130,9 +130,15 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
                   className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition bg-white text-xs font-bold"
                 >
                   {departments.map(dep => (
-                    <option key={dep} value={dep}>{dep}</option>
+                    <option key={dep} value={dep}>
+                      {dep} ({getDepartmentRate(dep).toLocaleString('vi-VN')}đ/ca)
+                    </option>
                   ))}
                 </select>
+                <div className="mt-1.5 flex items-center justify-between px-2.5 py-1.5 bg-emerald-50 border border-emerald-100 rounded-lg text-[11px] font-bold text-emerald-800">
+                  <span>💰 Mức phụ cấp bộ phận:</span>
+                  <span className="text-emerald-700 font-extrabold">{getDepartmentRate(department).toLocaleString('vi-VN')} VND / ca</span>
+                </div>
               </div>
             </div>
 
