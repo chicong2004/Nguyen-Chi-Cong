@@ -43,7 +43,6 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
 
   // Form State
   const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [facebookLink, setFacebookLink] = useState('');
@@ -62,7 +61,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
 
     try {
       if (isLogin) {
-        const user = await loginTNV(email, password);
+        const user = await loginTNV(email);
         setCurrentSessionUser(user);
       } else {
         if (!fullName.trim() || !phone.trim() || !email.trim()) {
@@ -78,7 +77,6 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
           eventId: selectedEventId,
           eventName: chosenEvt?.name || '',
           notes,
-          password,
         });
         setSuccess('Đăng ký thành công! Đang tự động chuyển đến tài khoản...');
         setTimeout(() => {
@@ -96,7 +94,6 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const fillQuickDemoUser = () => {
     setIsLogin(true);
     setEmail('nguyenvanan@gmail.com');
-    setPassword('123456');
   };
 
   return (
@@ -204,18 +201,6 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
             onChange={(e) => setEmail(e.target.value)}
             required
             placeholder="example@gmail.com"
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
-          />
-        </div>
-
-        <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">Mật khẩu <span className="text-red-500">*</span></label>
-          <input
-            type="password"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            placeholder="••••••••"
             className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
           />
         </div>
