@@ -669,7 +669,10 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {filteredUsers.map(user => {
-                        const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
+                        const userCheckins = checkins.filter(c => 
+                          c.userId === user.id || 
+                          (c.fullName && user.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())
+                        ).sort((a, b) => b.createdAt - a.createdAt);
                         const approvedCheckins = userCheckins.filter(c => c.status === 'approved');
                         const approvedCount = approvedCheckins.length;
                         const totalOTHours = approvedCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);

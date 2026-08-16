@@ -33,7 +33,10 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
 
   if (!isOpen || !user) return null;
 
-  const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
+  const userCheckins = checkins.filter(c => 
+    c.userId === user.id || 
+    (c.fullName && user.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())
+  ).sort((a, b) => b.createdAt - a.createdAt);
   const approvedCheckins = userCheckins.filter(c => c.status === 'approved');
   const totalSalary = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName || '', user.salaryRate, c.otHours), 0);
   const departments = getDepartmentsList();
