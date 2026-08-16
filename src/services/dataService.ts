@@ -10,6 +10,19 @@ const LOCAL_SESSION_KEY = 'app_session_user_v1';
 const STORAGE_MODE_KEY = 'app_storage_mode_preference';
 const CUSTOM_DEPARTMENTS_KEY = 'app_custom_departments_v1';
 const CUSTOM_EVENTS_KEY = 'app_custom_events_v1';
+const SYSTEM_DEPTS_ID = '00000000-0000-4000-8000-000000000099';
+const DEPARTMENT_RATES_KEY = 'app_department_rates_v1';
+
+const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
+  'Hậu cần': 50000,
+  'Truyền thông': 60000,
+  'Sự kiện': 50000,
+  'Tài trợ': 50000,
+  'Nhân sự': 50000,
+  'Cửu vạn': 150000,
+  'Lễ Tân': 70000,
+  'Backstage': 80000,
+};
 
 export function isSupabaseConfigured(): boolean {
   return Boolean(
@@ -184,20 +197,6 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     updatedAt: Date.now() - 86400000 * 2,
   }
 ];
-
-const SYSTEM_DEPTS_ID = '00000000-0000-4000-8000-000000000099';
-const DEPARTMENT_RATES_KEY = 'app_department_rates_v1';
-
-const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
-  'Hậu cần': 50000,
-  'Truyền thông': 60000,
-  'Sự kiện': 50000,
-  'Tài trợ': 50000,
-  'Nhân sự': 50000,
-  'Cửu vạn': 150000,
-  'Lễ Tân': 70000,
-  'Backstage': 80000,
-};
 
 export function getDepartmentsList(): string[] {
   const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
