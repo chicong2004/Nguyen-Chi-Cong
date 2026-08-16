@@ -344,12 +344,13 @@ function getLocalUsers(): User[] {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
     if (!raw) {
+      if (isSupabaseActive()) return [];
       localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(INITIAL_MOCK_USERS));
       return INITIAL_MOCK_USERS;
     }
     return JSON.parse(raw);
   } catch (e) {
-    return INITIAL_MOCK_USERS;
+    return [];
   }
 }
 
@@ -361,13 +362,14 @@ function getLocalCheckins(): Checkin[] {
   try {
     const raw = localStorage.getItem(LOCAL_CHECKINS_KEY);
     if (!raw) {
+      if (isSupabaseActive()) return [];
       localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(INITIAL_MOCK_CHECKINS));
       return INITIAL_MOCK_CHECKINS;
     }
     const checkins: Checkin[] = JSON.parse(raw);
     return checkins;
   } catch (e) {
-    return INITIAL_MOCK_CHECKINS;
+    return [];
   }
 }
 
@@ -723,7 +725,7 @@ export async function fetchAllUsers(): Promise<User[]> {
             updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
           }));
           
-          const localUsers = getLocalUsers();
+          const localUsers = getLocalUsers().filter(u => !u.id.startsWith('10000000-0000-4000-8000'));
           const mergedMap = new Map<string, User>();
           localUsers.forEach(u => mergedMap.set(u.id, u));
           cloudUsers.forEach(u => mergedMap.set(u.id, u));
@@ -731,7 +733,7 @@ export async function fetchAllUsers(): Promise<User[]> {
           saveLocalUsers(finalUsers);
           return finalUsers;
         } else {
-          return getLocalUsers();
+          return getLocalUsers().filter(u => !u.id.startsWith('10000000-0000-4000-8000'));
         }
       }
     } catch (err) {
