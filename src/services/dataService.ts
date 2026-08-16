@@ -647,17 +647,17 @@ export async function fetchAllUsers(): Promise<User[]> {
         if (userRecords.length > 0) {
           const cloudUsers: User[] = userRecords.map(d => ({
             id: d.id,
-            role: d.role,
-            fullName: d.full_name,
-            email: d.email || `${d.full_name.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-            phone: d.phone,
-            facebookLink: d.facebook_link || '',
-            department: d.department,
-            eventId: d.event_id || '',
-            eventName: d.event_name || '',
-            salaryRate: Number(d.salary_rate) || 50000,
-            createdAt: Number(d.created_at),
-            updatedAt: Number(d.updated_at),
+            role: d.role || 'tnv',
+            fullName: d.full_name || d.fullName || d.name || 'TNV',
+            email: d.email || `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+            phone: d.phone || d.phoneNumber || '',
+            facebookLink: d.facebook_link || d.facebookLink || '',
+            department: d.department || 'Hậu cần',
+            eventId: d.event_id || d.eventId || '',
+            eventName: d.event_name || d.eventName || '',
+            salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
+            createdAt: Number(d.created_at || d.createdAt) || Date.now(),
+            updatedAt: Number(d.updated_at || d.updatedAt) || Date.now(),
           }));
           
           const localUsers = getLocalUsers();
@@ -694,22 +694,24 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
       if (!error && data) {
         if (data.length > 0) {
           const cloudCheckins: Checkin[] = data.map(d => {
+            const reconstructedUserId = d.user_id || d.userId || d.id;
+            const reconstructedName = d.full_name || d.fullName || 'TNV';
             // Auto-reconstruct user profile if missing from users list
-            if (d.user_id && !existingUsersMap.has(d.user_id)) {
+            if (reconstructedUserId && !existingUsersMap.has(reconstructedUserId)) {
               const reconstructedUser: User = {
-                id: d.user_id,
+                id: reconstructedUserId,
                 role: 'tnv',
-                fullName: d.full_name || 'TNV Mới',
-                email: `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-                phone: '0000000000',
+                fullName: reconstructedName,
+                email: `${reconstructedName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+                phone: d.phone || '0000000000',
                 department: d.department || 'Hậu cần',
-                eventId: d.event_id || '',
-                eventName: d.event_name || '',
+                eventId: d.event_id || d.eventId || '',
+                eventName: d.event_name || d.eventName || '',
                 salaryRate: getDepartmentRate(d.department || 'Hậu cần'),
-                createdAt: Number(d.created_at) || Date.now(),
+                createdAt: Number(d.created_at || d.createdAt) || Date.now(),
                 updatedAt: Date.now(),
               };
-              existingUsersMap.set(d.user_id, reconstructedUser);
+              existingUsersMap.set(reconstructedUserId, reconstructedUser);
               users.push(reconstructedUser);
               saveLocalUsers(users);
               safeSupabaseUpsertUser(reconstructedUser);
@@ -717,21 +719,21 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
 
             return {
               id: d.id,
-              userId: d.user_id,
-              fullName: d.full_name,
-              department: d.department,
-              eventId: d.event_id || undefined,
-              eventName: d.event_name || undefined,
-              workDate: d.work_date || format(new Date(Number(d.created_at)), 'yyyy-MM-dd'),
-              shiftName: d.shift_name || 'Ca làm việc',
-              otHours: Number(d.ot_hours) || 0,
-              status: d.status,
+              userId: d.user_id || d.userId || d.id,
+              fullName: d.full_name || d.fullName || 'TNV',
+              department: d.department || 'Hậu cần',
+              eventId: d.event_id || d.eventId || undefined,
+              eventName: d.event_name || d.eventName || undefined,
+              workDate: d.work_date || d.workDate || (d.created_at ? format(new Date(Number(d.created_at)), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
+              shiftName: d.shift_name || d.shiftName || 'Ca làm việc',
+              otHours: Number(d.ot_hours || d.otHours) || 0,
+              status: d.status || 'pending',
               type: 'checkin',
-              adminNote: d.admin_note || d.notes || '',
-              checkinTime: d.checkin_time ? Number(d.checkin_time) : undefined,
-              checkoutTime: d.checkout_time ? Number(d.checkout_time) : undefined,
-              createdAt: Number(d.created_at),
-              updatedAt: Number(d.updated_at),
+              adminNote: d.admin_note || d.notes || d.adminNote || '',
+              checkinTime: d.checkin_time ? Number(d.checkin_time) : (d.checkinTime ? Number(d.checkinTime) : undefined),
+              checkoutTime: d.checkout_time ? Number(d.checkout_time) : (d.checkoutTime ? Number(d.checkoutTime) : undefined),
+              createdAt: Number(d.created_at || d.createdAt) || Date.now(),
+              updatedAt: Number(d.updated_at || d.updatedAt) || Date.now(),
             };
           });
 
