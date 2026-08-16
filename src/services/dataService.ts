@@ -150,12 +150,13 @@ function getLocalUsers(): User[] {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
     if (!raw) {
+      if (isSupabaseActive()) return [];
       localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(INITIAL_MOCK_USERS));
       return INITIAL_MOCK_USERS;
     }
     return JSON.parse(raw);
   } catch (e) {
-    return INITIAL_MOCK_USERS;
+    return [];
   }
 }
 
@@ -167,19 +168,14 @@ function getLocalCheckins(): Checkin[] {
   try {
     const raw = localStorage.getItem(LOCAL_CHECKINS_KEY);
     if (!raw) {
+      if (isSupabaseActive()) return [];
       localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(INITIAL_MOCK_CHECKINS));
       return INITIAL_MOCK_CHECKINS;
     }
     const checkins: Checkin[] = JSON.parse(raw);
-    const users = getLocalUsers();
-    const validUserIds = new Set(users.map(u => u.id));
-    const cleanCheckins = checkins.filter(c => validUserIds.has(c.userId));
-    if (cleanCheckins.length !== checkins.length) {
-      saveLocalCheckins(cleanCheckins);
-    }
-    return cleanCheckins;
+    return checkins;
   } catch (e) {
-    return INITIAL_MOCK_CHECKINS;
+    return [];
   }
 }
 
@@ -346,24 +342,8 @@ export async function fetchAllUsers(): Promise<User[]> {
           saveLocalUsers(cloudUsers);
           return cloudUsers;
         } else {
-          // If Supabase is empty, migrate local users once
-          const localUsers = getLocalUsers();
-          if (localUsers.length > 0) {
-            const payload = localUsers.map(u => ({
-              id: u.id,
-              role: u.role,
-              full_name: u.fullName,
-              email: u.email,
-              phone: u.phone,
-              facebook_link: u.facebookLink || '',
-              department: u.department,
-              salary_rate: u.salaryRate || 50000,
-              created_at: u.createdAt,
-              updated_at: u.updatedAt,
-            }));
-            await supabase.from('users').upsert(payload);
-          }
-          return localUsers;
+          saveLocalUsers([]);
+          return [];
         }
       }
     } catch (err) {
@@ -411,34 +391,8 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
           }
           return cloudCheckins;
         } else {
-          // If Supabase is empty, migrate local checkins once
-          const localCheckins = getLocalCheckins();
-          const cleanCheckins = localCheckins.filter(c => validUserIds.has(c.userId));
-          if (cleanCheckins.length > 0) {
-            const payload = cleanCheckins
-              .filter(c => isValidUUID(c.id) && isValidUUID(c.userId))
-              .map(c => ({
-                id: c.id,
-                user_id: c.userId,
-                full_name: c.fullName,
-                department: c.department,
-                work_date: c.workDate || format(new Date(), 'yyyy-MM-dd'),
-                shift_name: c.shiftName || 'Ca làm việc',
-                ot_hours: c.otHours || 0,
-                status: c.status,
-                notes: c.adminNote || '',
-                admin_note: c.adminNote || '',
-                created_at: c.createdAt,
-                updated_at: c.updatedAt,
-              }));
-            if (payload.length > 0) {
-              await supabase.from('checkins').upsert(payload);
-            }
-          }
-          if (userId) {
-            return cleanCheckins.filter(c => c.userId === userId);
-          }
-          return cleanCheckins;
+          saveLocalCheckins([]);
+          return [];
         }
       }
     } catch (err) {
