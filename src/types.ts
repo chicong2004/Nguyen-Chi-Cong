@@ -9,7 +9,7 @@ export interface User {
   facebookLink?: string;
   department: string;
   notes?: string;
-  salaryRate: number; // VND / shift (Chỉ Admin mới có quyền sửa)
+  salaryRate: number; // VND / ca (Chỉ Admin mới có quyền sửa)
   createdAt: number;
   updatedAt: number;
 }
@@ -19,12 +19,16 @@ export interface Checkin {
   userId: string;
   fullName: string;
   department: string;
-  shiftName?: string; // e.g. "Ca Sáng (08:00 - 12:00)", "Ca Chiều (13:00 - 17:00)"
+  workDate?: string; // YYYY-MM-DD
+  shiftName?: string; // e.g. "Ca Sáng (07:00 - 12:00)", "Ca Chiều (13:00 - 17:30)", "Ca Tối / OT (18:00 - 22:00)"
+  otHours?: number; // Số giờ OT làm thêm
   status: 'pending' | 'approved';
   checkinTime?: number;
   checkoutTime?: number;
   type?: 'checkin' | 'checkout' | 'full';
   qrCodeToken?: string;
+  adminNote?: string;
+  emailNotifySent?: boolean;
   createdAt: number;
   updatedAt: number;
 }

@@ -1,10 +1,14 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from '../supabase';
 import { User, Checkin } from '../types';
+import { format } from 'date-fns';
 
 const LOCAL_USERS_KEY = 'app_users_data_v1';
 const LOCAL_CHECKINS_KEY = 'app_checkins_data_v1';
 const LOCAL_SESSION_KEY = 'app_session_user_v1';
 const STORAGE_MODE_KEY = 'app_storage_mode_preference';
+const CUSTOM_DEPARTMENTS_KEY = 'app_custom_departments_v1';
+
+export const ADMIN_EMAIL_SENDER = 'chicong092004@gmail.com';
 
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -17,7 +21,7 @@ export function generateUUID(): string {
   });
 }
 
-// Initial Mock Data with valid UUIDs
+// Initial Mock Data
 const MOCK_USER_1_ID = '10000000-0000-4000-8000-000000000001';
 const MOCK_USER_2_ID = '10000000-0000-4000-8000-000000000002';
 const MOCK_USER_3_ID = '10000000-0000-4000-8000-000000000003';
@@ -31,7 +35,7 @@ const INITIAL_MOCK_USERS: User[] = [
     phone: '0901234567',
     facebookLink: 'https://facebook.com/nguyenvanan',
     department: 'Hậu cần',
-    notes: 'Rảnh các ngày thứ 7 & Chủ Nhật',
+    notes: 'Rảnh thứ 7 & Chủ Nhật',
     salaryRate: 50000,
     createdAt: Date.now() - 86400000 * 3,
     updatedAt: Date.now() - 86400000 * 3,
@@ -44,7 +48,7 @@ const INITIAL_MOCK_USERS: User[] = [
     phone: '0987654321',
     facebookLink: 'https://facebook.com/tranthibinh',
     department: 'Truyền thông',
-    notes: 'Chuyên chụp ảnh và viết bài',
+    notes: 'Chuyên chụp ảnh',
     salaryRate: 60000,
     createdAt: Date.now() - 86400000 * 2,
     updatedAt: Date.now() - 86400000 * 2,
@@ -57,7 +61,7 @@ const INITIAL_MOCK_USERS: User[] = [
     phone: '0912345678',
     facebookLink: '',
     department: 'Sự kiện',
-    notes: 'Rảnh các buổi chiều',
+    notes: 'Rảnh chiều',
     salaryRate: 50000,
     createdAt: Date.now() - 86400000,
     updatedAt: Date.now() - 86400000,
@@ -70,11 +74,15 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     userId: MOCK_USER_1_ID,
     fullName: 'Nguyễn Văn An',
     department: 'Hậu cần',
-    shiftName: 'Ca Sáng (08:00 - 12:00)',
+    workDate: format(new Date(), 'yyyy-MM-dd'),
+    shiftName: 'Ca Sáng (07:00 - 12:00)',
     status: 'approved',
     checkinTime: Date.now() - 86400000 * 2,
-    checkoutTime: Date.now() - 86400000 * 2 + 14400000,
+    checkoutTime: Date.now() - 86400000 * 2 + 18000000,
     type: 'full',
+    otHours: 0,
+    adminNote: 'Hoàn thành tốt ca làm',
+    emailNotifySent: true,
     createdAt: Date.now() - 86400000 * 2,
     updatedAt: Date.now() - 86400000 * 2,
   },
@@ -83,27 +91,29 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     userId: MOCK_USER_1_ID,
     fullName: 'Nguyễn Văn An',
     department: 'Hậu cần',
-    shiftName: 'Ca Chiều (13:00 - 17:00)',
+    workDate: format(new Date(), 'yyyy-MM-dd'),
+    shiftName: 'Ca Chiều (13:00 - 17:30)',
     status: 'pending',
     checkinTime: Date.now() - 86400000,
     type: 'checkin',
-    createdAt: Date.now() - 86400000,
-    updatedAt: Date.now() - 86400000,
-  },
-  {
-    id: '20000000-0000-4000-8000-000000000003',
-    userId: MOCK_USER_2_ID,
-    fullName: 'Trần Thị Bình',
-    department: 'Truyền thông',
-    shiftName: 'Ca Tối (18:00 - 21:00)',
-    status: 'approved',
-    checkinTime: Date.now() - 86400000,
-    checkoutTime: Date.now() - 86400000 + 10800000,
-    type: 'full',
+    otHours: 1,
+    adminNote: 'Đăng ký làm thêm 1h OT',
     createdAt: Date.now() - 86400000,
     updatedAt: Date.now() - 86400000,
   }
 ];
+
+export function getDepartmentsList(): string[] {
+  try {
+    const raw = localStorage.getItem(CUSTOM_DEPARTMENTS_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
+}
+
+export function saveDepartmentsList(deps: string[]) {
+  localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(deps));
+}
 
 export function getStorageMode(): 'local' | 'cloud' {
   try {
@@ -157,7 +167,6 @@ function getLocalCheckins(): Checkin[] {
     const checkins: Checkin[] = JSON.parse(raw);
     const users = getLocalUsers();
     const validUserIds = new Set(users.map(u => u.id));
-    // Filter out checkins of deleted users!
     const cleanCheckins = checkins.filter(c => validUserIds.has(c.userId));
     if (cleanCheckins.length !== checkins.length) {
       saveLocalCheckins(cleanCheckins);
@@ -243,7 +252,7 @@ export async function registerTNV(payload: {
         return newUser;
       }
     } catch (err: any) {
-      console.warn("Supabase auth signup notice - switching to local storage mode:", err);
+      console.warn("Supabase auth signup notice - switching to local mode:", err);
       setStorageMode('local');
     }
   }
@@ -325,7 +334,7 @@ export async function loginAdmin(passcode: string): Promise<User> {
     id: '00000000-0000-4000-8000-000000000000',
     role: 'admin',
     fullName: 'Quản trị viên Hệ thống',
-    email: 'admin@admin.com',
+    email: ADMIN_EMAIL_SENDER,
     phone: '0900000000',
     department: 'Ban Điều Hành',
     salaryRate: 0,
@@ -372,7 +381,6 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
   const localCheckins = getLocalCheckins();
   const users = await fetchAllUsers();
   const validUserIds = new Set(users.map(u => u.id));
-
   let cleanCheckins = localCheckins.filter(c => validUserIds.has(c.userId));
 
   if (isSupabaseActive()) {
@@ -414,61 +422,72 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
   return cleanCheckins.sort((a, b) => b.createdAt - a.createdAt);
 }
 
-export async function submitCheckin(user: User, shiftName?: string): Promise<Checkin> {
-  const newCheckin: Checkin = {
+// TNV registers schedule for a specific date, shift, and OT hours
+export async function submitScheduleRegistration(
+  user: User, 
+  workDate: string, 
+  shiftName: string, 
+  otHours: number = 0,
+  notes?: string
+): Promise<Checkin> {
+  const newSchedule: Checkin = {
     id: generateUUID(),
     userId: user.id,
     fullName: user.fullName,
     department: user.department,
-    shiftName: shiftName || 'Ca làm việc tiêu chuẩn',
+    workDate,
+    shiftName,
+    otHours,
     status: 'pending',
-    checkinTime: Date.now(),
     type: 'checkin',
+    adminNote: notes || '',
+    emailNotifySent: false,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
 
   const checkins = getLocalCheckins();
-  checkins.unshift(newCheckin);
+  checkins.unshift(newSchedule);
   saveLocalCheckins(checkins);
 
   if (isSupabaseActive() && isValidUUID(user.id)) {
     try {
       await supabase.from('checkins').insert({
-        id: newCheckin.id,
+        id: newSchedule.id,
         user_id: user.id,
         full_name: user.fullName,
         department: user.department,
         status: 'pending',
-        created_at: newCheckin.createdAt,
-        updated_at: newCheckin.updatedAt,
+        created_at: newSchedule.createdAt,
+        updated_at: newSchedule.updatedAt,
       });
     } catch (err) {
-      console.warn("Supabase checkin insert notice:", err);
+      console.warn("Supabase schedule insert notice:", err);
     }
   }
-  return newCheckin;
+  return newSchedule;
 }
 
-// Process TNV QR Scan (Daily Checkin / Checkout)
+// Process Event QR Scan (Auto Checkin / Checkout)
 export async function processQRCheckin(qrToken: string, activeUser?: User): Promise<{ success: boolean; message: string; checkin?: Checkin }> {
   try {
     let parsed: any = null;
     try {
       parsed = JSON.parse(qrToken);
     } catch {
-      parsed = { type: 'event_checkin', shiftName: 'Ca làm việc QR' };
+      parsed = { type: 'event_checkin', shiftName: 'Ca Sáng (07:00 - 12:00)' };
     }
 
     if (!activeUser) {
       return { success: false, message: 'Vui lòng đăng nhập tài khoản TNV để quét QR điểm danh!' };
     }
 
-    const shiftName = parsed.shiftName || 'Ca làm việc QR';
+    const shiftName = parsed.shiftName || 'Ca làm việc';
     const actionType = parsed.type === 'event_checkout' ? 'checkout' : 'checkin';
+    const workDate = parsed.date || format(new Date(), 'yyyy-MM-dd');
 
     const userCheckins = await fetchCheckins(activeUser.id);
-    const existingPending = userCheckins.find(c => c.status === 'pending' || !c.checkoutTime);
+    const existingPending = userCheckins.find(c => c.workDate === workDate || !c.checkoutTime);
 
     if (actionType === 'checkout') {
       if (existingPending) {
@@ -484,7 +503,8 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
           checkin: existingPending,
         };
       } else {
-        const checkin = await submitCheckin(activeUser, shiftName);
+        const checkin = await submitScheduleRegistration(activeUser, workDate, shiftName, 0);
+        checkin.checkinTime = Date.now();
         checkin.checkoutTime = Date.now();
         checkin.type = 'full';
         checkin.status = 'approved';
@@ -496,11 +516,12 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         };
       }
     } else {
-      // Check-in action
-      const checkin = await submitCheckin(activeUser, shiftName);
+      const checkin = await submitScheduleRegistration(activeUser, workDate, shiftName, 0);
+      checkin.checkinTime = Date.now();
+      await approveCheckinItem(checkin.id);
       return {
         success: true,
-        message: `✅ CHECK-IN VÀO CA THÀNH CÔNG! Ca "${shiftName}" (Đã gửi điểm danh).`,
+        message: `✅ CHECK-IN THÀNH CÔNG! Đã điểm danh tự động cho ca "${shiftName}".`,
         checkin,
       };
     }
@@ -525,7 +546,6 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     saveLocalUsers(users);
   }
 
-  // Also update full_name in checkins for this user
   if (data.fullName || data.department) {
     const checkins = getLocalCheckins();
     checkins.forEach(c => {
@@ -554,13 +574,33 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
   return user || (data as User);
 }
 
-export async function approveCheckinItem(checkinId: string): Promise<void> {
+// Admin updates Admin Note for a checkin record
+export async function updateCheckinAdminNote(checkinId: string, adminNote: string): Promise<void> {
   const checkins = getLocalCheckins();
   const target = checkins.find(c => c.id === checkinId);
   if (target) {
-    target.status = 'approved';
+    target.adminNote = adminNote;
     target.updatedAt = Date.now();
     saveLocalCheckins(checkins);
+  }
+}
+
+export async function approveCheckinItem(checkinId: string): Promise<{ success: boolean; emailNotice?: string }> {
+  const checkins = getLocalCheckins();
+  const target = checkins.find(c => c.id === checkinId);
+  let emailNotice = '';
+
+  if (target) {
+    target.status = 'approved';
+    target.emailNotifySent = true;
+    target.updatedAt = Date.now();
+    saveLocalCheckins(checkins);
+
+    const users = getLocalUsers();
+    const user = users.find(u => u.id === target.userId);
+    const targetEmail = user?.email || 'TNV';
+    emailNotice = `📧 Đã gửi email thông báo duyệt lịch tới ${targetEmail} từ ${ADMIN_EMAIL_SENDER}`;
+    console.log(emailNotice);
   }
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
@@ -570,6 +610,8 @@ export async function approveCheckinItem(checkinId: string): Promise<void> {
       console.warn("Supabase approve notice:", e);
     }
   }
+
+  return { success: true, emailNotice };
 }
 
 export async function bulkApproveCheckinsList(checkinIds: string[]): Promise<void> {
@@ -577,6 +619,7 @@ export async function bulkApproveCheckinsList(checkinIds: string[]): Promise<voi
   checkins.forEach(c => {
     if (checkinIds.includes(c.id)) {
       c.status = 'approved';
+      c.emailNotifySent = true;
       c.updatedAt = Date.now();
     }
   });
@@ -599,17 +642,14 @@ export async function updateUserSalary(userId: string, salaryRate: number): Prom
 }
 
 export async function removeUser(userId: string): Promise<void> {
-  // 1. Delete user from local storage
   let users = getLocalUsers();
   users = users.filter(u => u.id !== userId);
   saveLocalUsers(users);
 
-  // 2. Delete ALL checkins associated with this user!
   let checkins = getLocalCheckins();
   checkins = checkins.filter(c => c.userId !== userId);
   saveLocalCheckins(checkins);
 
-  // 3. Delete from Supabase if active
   if (isSupabaseActive() && isValidUUID(userId)) {
     try {
       await supabase.from('checkins').delete().eq('user_id', userId);

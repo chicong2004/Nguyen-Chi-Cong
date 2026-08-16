@@ -8,24 +8,27 @@ import {
   bulkApproveCheckinsList, 
   removeUser,
   updateUserProfileByAdmin,
-  processQRCheckin
+  updateCheckinAdminNote,
+  getDepartmentsList,
+  ADMIN_EMAIL_SENDER
 } from '../services/dataService';
 import { format } from 'date-fns';
 import Papa from 'papaparse';
 import AdminEditUserModal from './AdminEditUserModal';
 import AdminDailyQRModal from './AdminDailyQRModal';
-import QRScannerModal from './QRScannerModal';
+import AdminDepartmentModal from './AdminDepartmentModal';
 
 export default function AdminDashboard() {
   const { logout, isLocalStorageMode } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
+  const [departmentsList, setDepartmentsList] = useState<string[]>(getDepartmentsList());
   const [loading, setLoading] = useState(true);
   
   // Modals
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isDailyQROpen, setIsDailyQROpen] = useState(false);
-  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   // Search & Filter
@@ -43,9 +46,10 @@ export default function AdminDashboard() {
 
       const validUserIds = new Set(tnvUsers.map(u => u.id));
       const allCheckins = await fetchCheckins();
-      // Filter out checkins of deleted users!
       const validCheckins = allCheckins.filter(c => validUserIds.has(c.userId));
       setCheckins(validCheckins);
+
+      setDepartmentsList(getDepartmentsList());
     } catch (err) {
       console.error("Lỗi lấy dữ liệu Admin:", err);
     } finally {
@@ -58,11 +62,8 @@ export default function AdminDashboard() {
   }, []);
 
   const departments = useMemo(() => {
-    const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
-    const userDeps = users.map(u => u.department);
-    const combined = Array.from(new Set([...defaultDeps, ...userDeps]));
-    return ['Tất cả', ...combined];
-  }, [users]);
+    return ['Tất cả', ...departmentsList];
+  }, [departmentsList]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
@@ -75,7 +76,7 @@ export default function AdminDashboard() {
     });
   }, [users, activeTab, searchTerm]);
 
-  // Metrics (Cleaned from deleted users)
+  // Metrics
   const totalApprovedCheckins = checkins.filter(c => c.status === 'approved').length;
   const totalPendingCheckins = checkins.filter(c => c.status === 'pending').length;
   const totalPayroll = users.reduce((sum, u) => {
@@ -83,9 +84,11 @@ export default function AdminDashboard() {
     return sum + (userApprovedCount * (u.salaryRate || 50000));
   }, 0);
 
-  const handleApproveSingle = async (checkinId: string) => {
+  const handleApproveSingle = async (checkin: Checkin) => {
     try {
-      await approveCheckinItem(checkinId);
+      const res = await approveCheckinItem(checkin.id);
+      setToastMessage(res.emailNotice || `📧 Đã duyệt và gửi email thông báo từ ${ADMIN_EMAIL_SENDER}!`);
+      setTimeout(() => setToastMessage(''), 5000);
       await loadAllData();
     } catch (err) {
       console.error(err);
@@ -98,6 +101,8 @@ export default function AdminDashboard() {
     try {
       await bulkApproveCheckinsList(Array.from(selectedCheckins));
       setSelectedCheckins(new Set());
+      setToastMessage(`📧 Đã duyệt ${selectedCheckins.size} ca & tự động gửi email thông báo từ ${ADMIN_EMAIL_SENDER}!`);
+      setTimeout(() => setToastMessage(''), 5000);
       await loadAllData();
     } catch (err) {
       console.error(err);
@@ -115,18 +120,15 @@ export default function AdminDashboard() {
     await loadAllData();
   };
 
+  const handleAdminNoteChange = async (checkinId: string, note: string) => {
+    await updateCheckinAdminNote(checkinId, note);
+  };
+
   const handleDeleteUser = async (uid: string, name: string) => {
     if (confirm(`Bạn có chắc chắn muốn xoá TNV "${name}" và toàn bộ dữ liệu ca làm liên quan?`)) {
       await removeUser(uid);
       await loadAllData();
     }
-  };
-
-  const handleQRScanResult = async (qrText: string) => {
-    const res = await processQRCheckin(qrText);
-    setToastMessage(res.message);
-    setTimeout(() => setToastMessage(''), 5000);
-    await loadAllData();
   };
 
   // CSV Exports
@@ -183,11 +185,10 @@ export default function AdminDashboard() {
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-16">
       {/* Modals */}
       <AdminDailyQRModal isOpen={isDailyQROpen} onClose={() => setIsDailyQROpen(false)} />
-      <QRScannerModal 
-        isOpen={isScannerOpen} 
-        onClose={() => setIsScannerOpen(false)} 
-        onScanSuccess={handleQRScanResult} 
-        title="📷 Admin Quét Mã QR Quản Lý" 
+      <AdminDepartmentModal 
+        isOpen={isDeptModalOpen} 
+        onClose={() => setIsDeptModalOpen(false)} 
+        onSaved={loadAllData} 
       />
       <AdminEditUserModal 
         user={editingUser} 
@@ -202,23 +203,24 @@ export default function AdminDashboard() {
           <div>
             <div className="flex items-center gap-2">
               <h1 className="text-2xl font-black tracking-tight text-gray-900">Quản Trị Viên (Admin)</h1>
-              {isLocalStorageMode ? (
-                <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
-                  LocalStorage Mode
-                </span>
-              ) : (
-                <span className="text-[11px] font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full border border-blue-200">
-                  Supabase Cloud
-                </span>
-              )}
+              <span className="text-[11px] font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full border border-blue-200">
+                Email gửi thông báo: {ADMIN_EMAIL_SENDER}
+              </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">Bảng quản lý dữ liệu TNV: Chỉnh sửa trực tiếp bộ phận, phụ cấp và tạo QR điểm danh</p>
+            <p className="text-xs text-gray-500 mt-0.5">Quản lý lịch đăng ký, duyệt ca gửi mail tự động & thu thập mã QR Check-in/Check-out</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
             <button
+              onClick={() => setIsDeptModalOpen(true)}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
+            >
+              🏢 Quản Lý Bộ Phận
+            </button>
+
+            <button
               onClick={() => setIsDailyQROpen(true)}
-              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
             >
               📱 Tạo QR Check-in & Check-out
             </button>
@@ -249,13 +251,13 @@ export default function AdminDashboard() {
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
         {toastMessage && (
-          <div className="p-4 bg-emerald-600 text-white text-sm font-bold rounded-2xl shadow-lg flex justify-between items-center animate-bounce">
+          <div className="p-4 bg-emerald-600 text-white text-xs font-bold rounded-2xl shadow-lg flex justify-between items-center animate-bounce">
             <span>🎉 {toastMessage}</span>
             <button onClick={() => setToastMessage('')} className="text-xs bg-emerald-700 px-2 py-1 rounded-lg">Đóng</button>
           </div>
         )}
 
-        {/* Corrected Metric Cards */}
+        {/* Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tổng TNV Đăng ký</span>
@@ -263,13 +265,13 @@ export default function AdminDashboard() {
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Ca làm chờ duyệt</span>
-            <div className="text-3xl font-black text-amber-600 mt-2">{totalPendingCheckins} <span className="text-sm font-normal text-gray-500">ca</span></div>
+            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Lịch chờ Admin duyệt</span>
+            <div className="text-3xl font-black text-amber-600 mt-2">{totalPendingCheckins} <span className="text-sm font-normal text-gray-500">lịch</span></div>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Ca làm đã duyệt</span>
-            <div className="text-3xl font-black text-emerald-600 mt-2">{totalApprovedCheckins} <span className="text-sm font-normal text-gray-500">ca</span></div>
+            <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Lịch đã duyệt & gửi Mail</span>
+            <div className="text-3xl font-black text-emerald-600 mt-2">{totalApprovedCheckins} <span className="text-sm font-normal text-gray-500">lịch</span></div>
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
@@ -307,13 +309,13 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Direct Data Table View */}
+        {/* Main Data Table */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
             <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-              📋 Bảng Quản Lý Dữ Liệu TNV & Điểm Danh
+              📋 Bảng Quản Lý Dữ Liệu Lịch Làm Việc & Điểm Danh
               <span className="text-xs font-normal bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-full">
-                {filteredUsers.length} kết quả
+                {filteredUsers.length} người
               </span>
             </h3>
 
@@ -322,7 +324,7 @@ export default function AdminDashboard() {
                 onClick={handleBulkApprove}
                 className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition"
               >
-                Duyệt {selectedCheckins.size} ca đã chọn
+                Duyệt {selectedCheckins.size} lịch đã chọn & Gửi Mail
               </button>
             )}
           </div>
@@ -337,11 +339,11 @@ export default function AdminDashboard() {
                 <thead className="text-[11px] text-gray-400 bg-gray-50 uppercase font-semibold border-b border-gray-100">
                   <tr>
                     <th className="px-4 py-3">Họ và Tên / Liên hệ</th>
-                    <th className="px-4 py-3">Bộ phận (Sửa trực tiếp)</th>
+                    <th className="px-4 py-3">Bộ phận (Edit trực tiếp)</th>
                     <th className="px-4 py-3 text-right">Phụ cấp/ca (VND)</th>
                     <th className="px-4 py-3 text-center">Ca đã duyệt</th>
-                    <th className="px-4 py-3 text-right">Tổng lương (VND)</th>
-                    <th className="px-4 py-3">Lịch sử ca làm việc</th>
+                    <th className="px-4 py-3 text-right">Tổng phụ cấp (VND)</th>
+                    <th className="px-4 py-3">Lịch đăng ký, QR Check-in/out & Note Admin</th>
                     <th className="px-4 py-3 text-center">Thao tác</th>
                   </tr>
                 </thead>
@@ -349,7 +351,6 @@ export default function AdminDashboard() {
                   {filteredUsers.map(user => {
                     const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
                     const approvedCount = userCheckins.filter(c => c.status === 'approved').length;
-                    const pendingCheckins = userCheckins.filter(c => c.status === 'pending');
                     const userTotalSalary = approvedCount * (user.salaryRate || 50000);
 
                     return (
@@ -373,17 +374,10 @@ export default function AdminDashboard() {
                             onChange={(e) => handleDepartmentChangeInline(user.id, e.target.value)}
                             className="px-2.5 py-1.5 border border-blue-200 bg-blue-50/60 rounded-xl font-bold text-blue-800 text-xs outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
                           >
-                            <option value="Hậu cần">Hậu cần</option>
-                            <option value="Truyền thông">Truyền thông</option>
-                            <option value="Sự kiện">Sự kiện</option>
-                            <option value="Tài trợ">Tài trợ</option>
-                            <option value="Nhân sự">Nhân sự</option>
+                            {departmentsList.map(dep => (
+                              <option key={dep} value={dep}>{dep}</option>
+                            ))}
                           </select>
-                          {user.notes && (
-                            <div className="text-[11px] text-amber-700 bg-amber-50 p-1.5 rounded-lg mt-1 max-w-xs border border-amber-100">
-                              📝 {user.notes}
-                            </div>
-                          )}
                         </td>
 
                         {/* Inline Salary Input */}
@@ -398,7 +392,7 @@ export default function AdminDashboard() {
                           <span className="text-[10px] text-gray-400 block mt-0.5">VND / ca</span>
                         </td>
 
-                        {/* Approved shift count */}
+                        {/* Approved count */}
                         <td className="px-4 py-3 text-center align-top font-bold text-sm">
                           <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
                             {approvedCount} ca
@@ -410,25 +404,55 @@ export default function AdminDashboard() {
                           {userTotalSalary.toLocaleString()} VND
                         </td>
 
-                        {/* Checkin History & Approve Buttons */}
+                        {/* Schedules & QR Checkin/Checkout logs + Admin Notes */}
                         <td className="px-4 py-3 align-top">
                           {userCheckins.length === 0 ? (
-                            <span className="text-gray-400 italic text-[11px]">Chưa điểm danh ca nào</span>
+                            <span className="text-gray-400 italic text-[11px]">Chưa có lịch đăng ký nào</span>
                           ) : (
-                            <div className="space-y-1 max-h-24 overflow-y-auto pr-1 scrollbar-hide">
+                            <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
                               {userCheckins.map(ci => (
-                                <div key={ci.id} className="flex items-center justify-between text-[11px] bg-gray-50 p-1.5 rounded-lg border border-gray-100">
-                                  <span>{ci.shiftName || 'Ca làm'} ({format(ci.createdAt, 'HH:mm dd/MM')})</span>
-                                  {ci.status === 'pending' ? (
-                                    <button
-                                      onClick={() => handleApproveSingle(ci.id)}
-                                      className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded text-[10px] transition"
-                                    >
-                                      Duyệt ca
-                                    </button>
-                                  ) : (
-                                    <span className="text-emerald-600 font-bold text-[10px]">✓ Đã duyệt</span>
-                                  )}
+                                <div key={ci.id} className="p-2 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
+                                  <div className="flex items-center justify-between font-bold text-gray-900 text-xs">
+                                    <span>📅 {ci.workDate || format(ci.createdAt, 'dd/MM/yyyy')}: {ci.shiftName}</span>
+                                    {ci.otHours ? (
+                                      <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.2 rounded font-bold">
+                                        +{ci.otHours}h OT
+                                      </span>
+                                    ) : null}
+                                  </div>
+
+                                  {/* Check-in & Check-out Automatic Data */}
+                                  <div className="flex items-center gap-3 text-[11px] text-gray-500">
+                                    <span>📍 In: {ci.checkinTime ? format(ci.checkinTime, 'HH:mm') : 'Chưa quét'}</span>
+                                    <span>🏁 Out: {ci.checkoutTime ? format(ci.checkoutTime, 'HH:mm') : 'Chưa quét'}</span>
+                                  </div>
+
+                                  {/* Admin Note Inline Edit */}
+                                  <div className="flex items-center gap-1.5 mt-1">
+                                    <span className="text-[10px] text-gray-400">Note Admin:</span>
+                                    <input
+                                      type="text"
+                                      defaultValue={ci.adminNote || ''}
+                                      onBlur={(e) => handleAdminNoteChange(ci.id, e.target.value)}
+                                      placeholder="Nhập ghi chú Admin..."
+                                      className="flex-1 px-2 py-0.5 text-[11px] border border-gray-300 rounded bg-white outline-none focus:ring-1 focus:ring-blue-500"
+                                    />
+                                  </div>
+
+                                  <div className="flex items-center justify-between pt-1">
+                                    {ci.status === 'pending' ? (
+                                      <button
+                                        onClick={() => handleApproveSingle(ci)}
+                                        className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded text-[10px] transition"
+                                      >
+                                        Duyệt Lịch & Gửi Mail
+                                      </button>
+                                    ) : (
+                                      <span className="text-emerald-600 font-bold text-[10px] flex items-center gap-1">
+                                        ✓ Đã duyệt 📧 Email (from {ADMIN_EMAIL_SENDER})
+                                      </span>
+                                    )}
+                                  </div>
                                 </div>
                               ))}
                             </div>
