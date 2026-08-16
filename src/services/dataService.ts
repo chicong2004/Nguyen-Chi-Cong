@@ -431,55 +431,39 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
   if (!isValidUUID(user.id)) {
     user.id = generateUUID();
   }
+  
+  const cleanPayload: any = {
+    id: user.id,
+    role: user.role || 'tnv',
+    full_name: user.fullName,
+    email: user.email,
+    phone: user.phone,
+    facebook_link: user.facebookLink || '',
+    department: user.department,
+    event_id: user.eventId || null,
+    event_name: user.eventName || null,
+    salary_rate: user.salaryRate || 50000,
+  };
+
   try {
-    const rawCreatedAt = user.createdAt || Date.now();
-    const rawUpdatedAt = user.updatedAt || Date.now();
+    // 1. Primary: Direct Upsert
+    const { error: err1 } = await supabase.from('users').upsert(cleanPayload);
+    if (!err1) return;
 
-    const payload: any = {
-      id: user.id,
-      role: user.role || 'tnv',
-      full_name: user.fullName,
-      email: user.email,
-      phone: user.phone,
-      facebook_link: user.facebookLink || '',
-      department: user.department,
-      event_id: user.eventId || null,
-      event_name: user.eventName || null,
-      salary_rate: user.salaryRate || 50000,
-      created_at: rawCreatedAt,
-      updated_at: rawUpdatedAt,
-    };
+    console.warn("User upsert notice, retrying direct insert:", err1.message);
 
-    // 1. Try Upsert first
-    let { error } = await supabase.from('users').upsert(payload);
+    // 2. Fallback: Direct Insert
+    const { error: err2 } = await supabase.from('users').insert([cleanPayload]);
+    if (!err2) return;
 
-    // 2. If Upsert fails, try direct INSERT
-    if (error) {
-      console.warn("Supabase user upsert notice, trying direct insert:", error.message);
-      const insertRes = await supabase.from('users').insert([payload]);
-      error = insertRes.error;
-    }
+    console.warn("User insert notice, retrying update by email:", err2.message);
 
-    // 3. If direct INSERT fails (e.g. timestamptz date type error), try ISO string dates
-    if (error) {
-      console.warn("Retrying user with ISO string date format:", error.message);
-      payload.created_at = new Date(rawCreatedAt).toISOString();
-      payload.updated_at = new Date(rawUpdatedAt).toISOString();
-      const isoRes = await supabase.from('users').insert([payload]);
-      error = isoRes.error;
-    }
-
-    // 4. If ISO date fails, omit optional date/event columns to let Postgres defaults handle it
-    if (error) {
-      console.warn("Retrying user minimal payload:", error.message);
-      delete payload.event_id;
-      delete payload.event_name;
-      delete payload.created_at;
-      delete payload.updated_at;
-      const baseRes = await supabase.from('users').insert([payload]);
-      if (baseRes.error) {
-        await supabase.from('users').upsert(payload);
-      }
+    // 3. Fallback: Update existing row by email
+    delete cleanPayload.event_id;
+    delete cleanPayload.event_name;
+    const { error: err3 } = await supabase.from('users').insert([cleanPayload]);
+    if (err3) {
+      await supabase.from('users').update(cleanPayload).eq('email', user.email);
     }
   } catch (err) {
     console.warn("Supabase user sync error:", err);
@@ -494,67 +478,41 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
   if (!isValidUUID(checkin.userId)) {
     checkin.userId = generateUUID();
   }
+
+  const cleanPayload: any = {
+    id: checkin.id,
+    user_id: checkin.userId,
+    full_name: checkin.fullName,
+    department: checkin.department,
+    event_id: checkin.eventId || null,
+    event_name: checkin.eventName || null,
+    work_date: checkin.workDate || format(new Date(), 'yyyy-MM-dd'),
+    shift_name: checkin.shiftName || 'Ca làm việc',
+    ot_hours: checkin.otHours || 0,
+    status: checkin.status || 'pending',
+    notes: checkin.adminNote || '',
+    admin_note: checkin.adminNote || '',
+  };
+
   try {
-    const rawCreatedAt = checkin.createdAt || Date.now();
-    const rawUpdatedAt = checkin.updatedAt || Date.now();
+    // 1. Primary: Direct Upsert
+    const { error: err1 } = await supabase.from('checkins').upsert(cleanPayload);
+    if (!err1) return;
 
-    const payload: any = {
-      id: checkin.id,
-      user_id: checkin.userId,
-      full_name: checkin.fullName,
-      department: checkin.department,
-      event_id: checkin.eventId || null,
-      event_name: checkin.eventName || null,
-      work_date: checkin.workDate || format(new Date(), 'yyyy-MM-dd'),
-      shift_name: checkin.shiftName || 'Ca làm việc',
-      ot_hours: checkin.otHours || 0,
-      status: checkin.status || 'pending',
-      notes: checkin.adminNote || '',
-      admin_note: checkin.adminNote || '',
-      checkin_time: checkin.checkinTime || null,
-      checkout_time: checkin.checkoutTime || null,
-      created_at: rawCreatedAt,
-      updated_at: rawUpdatedAt,
-    };
+    console.warn("Checkin upsert notice, retrying direct insert:", err1.message);
 
-    // 1. Try Upsert first
-    let { error } = await supabase.from('checkins').upsert(payload);
+    // 2. Fallback: Direct Insert
+    const { error: err2 } = await supabase.from('checkins').insert([cleanPayload]);
+    if (!err2) return;
 
-    // 2. If Upsert fails, try direct INSERT
-    if (error) {
-      console.warn("Supabase checkin upsert notice, trying direct insert:", error.message);
-      const insertRes = await supabase.from('checkins').insert([payload]);
-      error = insertRes.error;
-    }
+    console.warn("Checkin insert notice, retrying base insert:", err2.message);
 
-    // 3. If direct INSERT fails (e.g. timestamptz date type error), try ISO string dates
-    if (error) {
-      console.warn("Retrying checkin with ISO string date format:", error.message);
-      payload.created_at = new Date(rawCreatedAt).toISOString();
-      payload.updated_at = new Date(rawUpdatedAt).toISOString();
-      if (payload.checkin_time && typeof payload.checkin_time === 'number') {
-        payload.checkin_time = new Date(payload.checkin_time).toISOString();
-      }
-      if (payload.checkout_time && typeof payload.checkout_time === 'number') {
-        payload.checkout_time = new Date(payload.checkout_time).toISOString();
-      }
-      const isoRes = await supabase.from('checkins').insert([payload]);
-      error = isoRes.error;
-    }
-
-    // 4. If ISO date fails, omit optional columns to let Postgres defaults handle it
-    if (error) {
-      console.warn("Retrying checkin minimal base payload:", error.message);
-      delete payload.event_id;
-      delete payload.event_name;
-      delete payload.created_at;
-      delete payload.updated_at;
-      delete payload.checkin_time;
-      delete payload.checkout_time;
-      const baseRes = await supabase.from('checkins').insert([payload]);
-      if (baseRes.error) {
-        await supabase.from('checkins').upsert(payload);
-      }
+    // 3. Fallback: Base Insert without optional event columns
+    delete cleanPayload.event_id;
+    delete cleanPayload.event_name;
+    const { error: err3 } = await supabase.from('checkins').insert([cleanPayload]);
+    if (err3) {
+      await supabase.from('checkins').update(cleanPayload).eq('id', checkin.id);
     }
   } catch (err) {
     console.warn("Supabase checkin sync error:", err);
