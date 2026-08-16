@@ -113,15 +113,15 @@ export default function AdminDashboard() {
         const targetEvtName = targetEvt?.name;
 
         const hasMatchingCheckin = checkins.some(c => 
-          c.userId === u.id && (
+          (c.userId === u.id || (c.fullName && c.fullName.trim().toLowerCase() === u.fullName.trim().toLowerCase())) && (
             c.eventId === selectedEventFilter || 
             (targetEvtName && c.eventName === targetEvtName) ||
-            (!c.eventId && !c.eventName && (eventsList.length === 1 || targetEvt?.status === 'active'))
+            (!c.eventId && !c.eventName)
           )
         );
         const hasMatchingUserEvent = u.eventId === selectedEventFilter || 
           (targetEvtName && u.eventName === targetEvtName) ||
-          (!u.eventId && !u.eventName && (eventsList.length === 1 || targetEvt?.status === 'active'));
+          !u.eventId || !u.eventName;
 
         matchesEvent = hasMatchingCheckin || hasMatchingUserEvent;
       }

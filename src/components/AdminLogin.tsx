@@ -96,9 +96,8 @@ export default function AdminLogin() {
 
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label className="block text-xs font-bold text-gray-300 mb-1 flex items-center justify-between">
-              <span>🔑 Mật khẩu Admin (Lớp 1) <span className="text-red-400">*</span></span>
-              <span className="text-[10px] text-gray-500 font-normal">Mặc định: admin123</span>
+            <label className="block text-xs font-bold text-gray-300 mb-1">
+              🔑 Mật khẩu Admin (Lớp 1) <span className="text-red-400">*</span>
             </label>
             <div className="relative">
               <input
