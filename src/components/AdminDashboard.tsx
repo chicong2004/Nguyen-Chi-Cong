@@ -60,8 +60,12 @@ export default function AdminDashboard() {
       setUsers(tnvUsers);
 
       const validUserIds = new Set(tnvUsers.map(u => u.id));
+      const validUserNames = new Set(tnvUsers.map(u => u.fullName.trim().toLowerCase()));
       const allCheckins = await fetchCheckins();
-      const validCheckins = allCheckins.filter(c => validUserIds.has(c.userId));
+      const validCheckins = allCheckins.filter(c => 
+        validUserIds.has(c.userId) || 
+        (c.fullName && validUserNames.has(c.fullName.trim().toLowerCase()))
+      );
       setCheckins(validCheckins);
 
       setDepartmentsList(getDepartmentsList());

@@ -766,7 +766,11 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
           saveLocalCheckins(finalCheckins);
 
           if (userId) {
-            const targetUser = users.find(u => u.id === userId);
+            const targetUser = users.find(u => 
+              u.id === userId || 
+              (u.email && u.email.toLowerCase() === userId.toLowerCase()) ||
+              (u.fullName && u.fullName.trim().toLowerCase() === userId.trim().toLowerCase())
+            );
             return finalCheckins.filter(c => 
               c.userId === userId || 
               (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
@@ -776,7 +780,11 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
         } else {
           const localCheckins = getLocalCheckins();
           if (userId) {
-            const targetUser = users.find(u => u.id === userId);
+            const targetUser = users.find(u => 
+              u.id === userId || 
+              (u.email && u.email.toLowerCase() === userId.toLowerCase()) ||
+              (u.fullName && u.fullName.trim().toLowerCase() === userId.trim().toLowerCase())
+            );
             return localCheckins.filter(c => 
               c.userId === userId || 
               (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
@@ -792,7 +800,11 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
 
   const localCheckins = getLocalCheckins();
   if (userId) {
-    const targetUser = users.find(u => u.id === userId);
+    const targetUser = users.find(u => 
+      u.id === userId || 
+      (u.email && u.email.toLowerCase() === userId.toLowerCase()) ||
+      (u.fullName && u.fullName.trim().toLowerCase() === userId.trim().toLowerCase())
+    );
     return localCheckins.filter(c => 
       c.userId === userId || 
       (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
