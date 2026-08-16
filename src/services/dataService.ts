@@ -611,6 +611,14 @@ export async function updateCheckinAdminNote(checkinId: string, adminNote: strin
     saveLocalCheckins(checkins);
     await triggerCloudSync();
   }
+
+  if (isSupabaseActive() && isValidUUID(checkinId)) {
+    try {
+      await supabase.from('checkins').update({ admin_note: adminNote, updated_at: Date.now() }).eq('id', checkinId);
+    } catch (e) {
+      console.warn("Supabase update admin note notice:", e);
+    }
+  }
 }
 
 export async function approveCheckinItem(checkinId: string): Promise<{ success: boolean; emailNotice: string }> {
