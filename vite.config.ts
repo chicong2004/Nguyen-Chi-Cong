@@ -15,8 +15,12 @@ export default defineConfig(() => {
       hmr: process.env.DISABLE_HMR !== 'true',
       watch: process.env.DISABLE_HMR === 'true' ? null : {},
     },
+    esbuild: {
+      minifyIdentifiers: false,
+      keepNames: true,
+    },
     build: {
-      target: 'es2015',
+      target: ['es2020', 'safari14'],
       chunkSizeWarningLimit: 3000,
     },
   };
