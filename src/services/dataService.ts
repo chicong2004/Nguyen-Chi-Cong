@@ -730,41 +730,70 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     const workDate = parsed.date || format(new Date(), 'yyyy-MM-dd');
 
     const userCheckins = await fetchCheckins(activeUser.id);
+    const localUserCheckins = getLocalCheckins().filter(c => c.userId === activeUser.id);
 
-    // Find checkin for today or any open shift without checkout
-    let existingShift = userCheckins.find(c => c.workDate === workDate && !c.checkoutTime);
-    if (!existingShift) {
-      existingShift = userCheckins.find(c => c.workDate === workDate);
-    }
-    if (!existingShift) {
-      existingShift = userCheckins.find(c => !c.checkoutTime);
-    }
+    // Merge Cloud and Local checkins so local checkinTime is NEVER lost!
+    const allUserCheckins: Checkin[] = [...userCheckins];
+    localUserCheckins.forEach(lc => {
+      const idx = allUserCheckins.findIndex(c => c.id === lc.id);
+      if (idx !== -1) {
+        if (lc.checkinTime && !allUserCheckins[idx].checkinTime) {
+          allUserCheckins[idx].checkinTime = lc.checkinTime;
+        }
+      } else {
+        allUserCheckins.push(lc);
+      }
+    });
 
     if (actionType === 'checkout') {
-      const openShift = userCheckins.find(c => c.checkinTime && !c.checkoutTime) || existingShift;
+      let openShift = allUserCheckins.find(c => c.checkinTime && !c.checkoutTime);
+      if (!openShift) {
+        openShift = allUserCheckins.find(c => c.workDate === workDate && c.checkinTime);
+      }
+      if (!openShift) {
+        openShift = allUserCheckins.find(c => c.workDate === workDate);
+      }
+      if (!openShift && allUserCheckins.length > 0) {
+        openShift = allUserCheckins[0];
+      }
 
-      if (openShift && openShift.checkinTime) {
-        openShift.checkoutTime = Date.now();
+      if (openShift) {
+        const now = Date.now();
+        if (!openShift.checkinTime) {
+          openShift.checkinTime = now - 3600000; // Fallback 1h ago if missing
+        }
+
+        openShift.checkoutTime = now;
         openShift.type = 'full';
         openShift.status = 'approved';
-        openShift.updatedAt = Date.now();
+        openShift.updatedAt = now;
 
-        // Update local storage
+        // Save local
         const allCheckins = getLocalCheckins();
         const idx = allCheckins.findIndex(c => c.id === openShift.id);
         if (idx !== -1) {
           allCheckins[idx] = openShift;
-          saveLocalCheckins(allCheckins);
+        } else {
+          allCheckins.unshift(openShift);
         }
+        saveLocalCheckins(allCheckins);
 
-        // Update Supabase
+        // Save Supabase via UPSERT
         if (isSupabaseActive() && isValidUUID(openShift.id)) {
-          await supabase.from('checkins').update({
+          await supabase.from('checkins').upsert({
+            id: openShift.id,
+            user_id: activeUser.id,
+            full_name: activeUser.fullName,
+            department: openShift.department || activeUser.department,
+            work_date: openShift.workDate || workDate,
+            shift_name: openShift.shiftName || 'Ca làm việc',
+            ot_hours: openShift.otHours || 0,
             status: 'approved',
             checkin_time: openShift.checkinTime,
             checkout_time: openShift.checkoutTime,
-            updated_at: Date.now(),
-          }).eq('id', openShift.id);
+            created_at: openShift.createdAt || now,
+            updated_at: now,
+          });
         }
 
         await approveCheckinItem(openShift.id);
@@ -777,35 +806,51 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       } else {
         return {
           success: false,
-          message: `⚠️ Bạn CHƯA THỰC HIỆN CHECK-IN cho ca ngày ${workDate}! Phải hoàn thành cả Check-in và Check-out mới được tự động duyệt & tính công.`,
+          message: `⚠️ Không tìm thấy lịch ca làm của bạn ngày ${workDate}. Vui lòng liên hệ Admin để duyệt thủ công!`,
         };
       }
     } else {
       // CHECK-IN ACTION
-      let checkin = existingShift;
+      let openShift = allUserCheckins.find(c => c.workDate === workDate && !c.checkoutTime) || allUserCheckins.find(c => c.workDate === workDate);
+      
+      let checkin = openShift;
       if (!checkin) {
         checkin = await submitScheduleRegistration(activeUser, workDate, 'Ca làm việc', 0);
       }
 
-      checkin.checkinTime = Date.now();
-      checkin.status = 'pending'; // 🛑 STAYS PENDING UNTIL CHECK-OUT!
-      checkin.updatedAt = Date.now();
+      const now = Date.now();
+      checkin.checkinTime = now;
+      checkin.status = 'pending';
+      checkin.updatedAt = now;
 
-      // Update local storage
+      // Save local
       const allCheckins = getLocalCheckins();
       const idx = allCheckins.findIndex(c => c.id === checkin.id);
       if (idx !== -1) {
         allCheckins[idx] = checkin;
-        saveLocalCheckins(allCheckins);
+      } else {
+        allCheckins.unshift(checkin);
       }
+      saveLocalCheckins(allCheckins);
 
-      // Update Supabase
+      // Save Supabase via UPSERT
       if (isSupabaseActive() && isValidUUID(checkin.id)) {
-        await supabase.from('checkins').update({
+        await supabase.from('checkins').upsert({
+          id: checkin.id,
+          user_id: activeUser.id,
+          full_name: activeUser.fullName,
+          department: checkin.department || activeUser.department,
+          work_date: checkin.workDate || workDate,
+          shift_name: checkin.shiftName || 'Ca làm việc',
+          ot_hours: checkin.otHours || 0,
           status: 'pending',
+          notes: checkin.adminNote || '',
+          admin_note: checkin.adminNote || '',
           checkin_time: checkin.checkinTime,
-          updated_at: Date.now(),
-        }).eq('id', checkin.id);
+          checkout_time: checkin.checkoutTime || null,
+          created_at: checkin.createdAt || now,
+          updated_at: now,
+        });
       }
 
       await triggerCloudSync();
