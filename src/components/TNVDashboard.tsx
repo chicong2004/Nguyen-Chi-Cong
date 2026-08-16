@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { Checkin, User } from '../types';
-import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin } from '../services/dataService';
+import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, getDepartmentRate } from '../services/dataService';
 import { format } from 'date-fns';
 import QRScannerModal from './QRScannerModal';
 
@@ -13,6 +13,8 @@ export default function TNVDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Registration Form State
+  const [departmentsList, setDepartmentsList] = useState<string[]>([]);
+  const [selectedDepartment, setSelectedDepartment] = useState(userProfile?.department || 'Hậu cần');
   const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [selectedShift, setSelectedShift] = useState('Ca Sáng (07:00 - 12:00)');
   const [otHours, setOtHours] = useState<number>(0);
@@ -44,6 +46,8 @@ export default function TNVDashboard() {
 
   useEffect(() => {
     loadUserData();
+    const deps = getDepartmentsList();
+    setDepartmentsList(deps);
 
     // Auto refresh every 10 seconds to sync Admin salary updates & approval statuses in real-time!
     const timer = setInterval(loadUserData, 10000);
@@ -51,6 +55,12 @@ export default function TNVDashboard() {
   }, [userProfile?.id]);
 
   const activeProfile = currentUserProfile || userProfile;
+
+  useEffect(() => {
+    if (activeProfile?.department) {
+      setSelectedDepartment(activeProfile.department);
+    }
+  }, [activeProfile?.department]);
 
   const handleScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -64,9 +74,10 @@ export default function TNVDashboard() {
         selectedDate, 
         selectedShift, 
         Number(otHours), 
-        notes
+        notes,
+        selectedDepartment
       );
-      setSuccessMessage(`Đã gửi đăng ký lịch làm việc (${selectedDate} - ${selectedShift})! Đang chờ Admin duyệt.`);
+      setSuccessMessage(`Đã gửi đăng ký lịch làm việc ca (${selectedDepartment} - ${selectedDate} - ${selectedShift})! Đang chờ Admin duyệt.`);
       setNotes('');
       await loadUserData();
     } catch (err) {
@@ -166,6 +177,28 @@ export default function TNVDashboard() {
           )}
 
           <form onSubmit={handleScheduleSubmit} className="space-y-4">
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+                <span>🏢 Chọn / Đổi Bộ Phận Công Tác Cho Ca Này:</span>
+                <span className="text-[10px] text-blue-600 font-semibold">(Có thể đổi theo từng ca)</span>
+              </label>
+              <select
+                value={selectedDepartment}
+                onChange={(e) => setSelectedDepartment(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {departmentsList.map(dep => (
+                  <option key={dep} value={dep}>
+                    {dep} ({getDepartmentRate(dep).toLocaleString('vi-VN')}đ/ca)
+                  </option>
+                ))}
+              </select>
+              <div className="mt-1.5 flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-bold text-emerald-800">
+                <span>💰 Mức phụ cấp cho ca này:</span>
+                <span className="text-emerald-700 font-extrabold">{getDepartmentRate(selectedDepartment).toLocaleString('vi-VN')} VND / ca</span>
+              </div>
+            </div>
+
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Chọn Ngày Làm Việc:</label>
               <input

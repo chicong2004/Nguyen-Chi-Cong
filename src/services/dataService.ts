@@ -286,10 +286,27 @@ export async function registerTNV(payload: {
   notes?: string;
   password?: string;
 }): Promise<User> {
+  const cleanEmail = payload.email.trim().toLowerCase();
+
+  // Check local users for existing email
   const users = getLocalUsers();
-  const existing = users.find(u => u.email.toLowerCase() === payload.email.toLowerCase());
-  if (existing) {
-    throw new Error('Email này đã được đăng ký trên hệ thống');
+  const existingLocal = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
+  if (existingLocal) {
+    throw new Error('⚠️ Email này đã được đăng ký tài khoản TNV trước đó! Mỗi email chỉ được tạo 1 tài khoản.');
+  }
+
+  // Check Supabase Cloud for existing email
+  if (isSupabaseActive()) {
+    try {
+      const { data } = await supabase.from('users').select('id, full_name').eq('email', cleanEmail);
+      if (data && data.length > 0 && data[0].full_name !== '__SYSTEM_DEPARTMENTS__') {
+        throw new Error('⚠️ Email này đã được đăng ký tài khoản TNV trên hệ thống! Vui lòng bấm "Đăng nhập" để đăng ký lịch ca làm & đổi bộ phận.');
+      }
+    } catch (err: any) {
+      if (err.message && err.message.includes('Đã được đăng ký')) {
+        throw err;
+      }
+    }
   }
 
   const newUser: User = {
@@ -483,13 +500,27 @@ export async function submitScheduleRegistration(
   workDate: string, 
   shiftName: string, 
   otHours: number = 0,
-  notes?: string
+  notes?: string,
+  targetDepartment?: string
 ): Promise<Checkin> {
+  const chosenDepartment = targetDepartment || user.department;
+  const deptRate = getDepartmentRate(chosenDepartment);
+
+  // Update user profile department and salary rate if targetDepartment is specified
+  if (targetDepartment) {
+    user.department = targetDepartment;
+    user.salaryRate = deptRate;
+    user.updatedAt = Date.now();
+    try {
+      await updateUserProfileByAdmin(user.id, { department: targetDepartment, salaryRate: deptRate });
+    } catch {}
+  }
+
   const newSchedule: Checkin = {
     id: generateUUID(),
     userId: user.id,
     fullName: user.fullName,
-    department: user.department,
+    department: chosenDepartment,
     workDate,
     shiftName,
     otHours,
@@ -509,7 +540,7 @@ export async function submitScheduleRegistration(
 
   if (isSupabaseActive() && isValidUUID(user.id)) {
     try {
-      // First ensure user exists in Supabase users table to satisfy foreign key constraint
+      // First ensure user exists in Supabase users table with chosen department & rate
       await supabase.from('users').upsert({
         id: user.id,
         role: user.role,
@@ -517,10 +548,10 @@ export async function submitScheduleRegistration(
         email: user.email,
         phone: user.phone,
         facebook_link: user.facebookLink || '',
-        department: user.department,
-        salary_rate: user.salaryRate || 50000,
+        department: chosenDepartment,
+        salary_rate: deptRate,
         created_at: user.createdAt,
-        updated_at: user.updatedAt,
+        updated_at: Date.now(),
       });
 
       // Insert full checkin payload
@@ -528,7 +559,7 @@ export async function submitScheduleRegistration(
         id: newSchedule.id,
         user_id: user.id,
         full_name: user.fullName,
-        department: user.department,
+        department: chosenDepartment,
         work_date: workDate,
         shift_name: shiftName,
         ot_hours: otHours,
