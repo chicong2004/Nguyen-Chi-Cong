@@ -402,6 +402,15 @@ export async function registerTNV(payload: {
 }): Promise<User> {
   const cleanEmail = payload.email.trim().toLowerCase();
 
+  // Auto-assign active event if not specified
+  if (!payload.eventId) {
+    const activeEvts = getEventsList().filter(e => e.status === 'active');
+    if (activeEvts.length > 0) {
+      payload.eventId = activeEvts[0].id;
+      payload.eventName = activeEvts[0].name;
+    }
+  }
+
   // Check local users for existing email registration for this event
   const users = getLocalUsers();
   const existingLocalForEvent = users.find(u => 
@@ -668,6 +677,15 @@ export async function submitScheduleRegistration(
   const chosenDepartment = targetDepartment || user.department;
   const deptRate = getDepartmentRate(chosenDepartment);
 
+  // Auto-assign active event if eventId is missing
+  if (!eventId) {
+    const activeEvts = getEventsList().filter(e => e.status === 'active');
+    if (activeEvts.length > 0) {
+      eventId = activeEvts[0].id;
+      eventName = activeEvts[0].name;
+    }
+  }
+
   // Update user profile department and salary rate if targetDepartment is specified
   if (targetDepartment) {
     user.department = targetDepartment;
@@ -877,7 +895,32 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       
       let checkin = openShift;
       if (!checkin) {
-        checkin = await submitScheduleRegistration(activeUser, workDate, 'Ca làm việc', 0);
+        const activeEvts = getEventsList().filter(e => e.status === 'active');
+        const chosenEvt = activeEvts.length > 0 ? activeEvts[0] : undefined;
+        checkin = {
+          id: generateUUID(),
+          userId: activeUser.id,
+          fullName: activeUser.fullName,
+          department: activeUser.department,
+          eventId: chosenEvt?.id || activeUser.eventId || '',
+          eventName: chosenEvt?.name || activeUser.eventName || '',
+          workDate: workDate,
+          shiftName: 'Ca làm việc',
+          otHours: 0,
+          status: 'pending',
+          type: 'checkin',
+          createdAt: Date.now(),
+          updatedAt: Date.now(),
+        };
+      }
+
+      // Ensure eventId is attached
+      if (!checkin.eventId) {
+        const activeEvts = getEventsList().filter(e => e.status === 'active');
+        if (activeEvts.length > 0) {
+          checkin.eventId = activeEvts[0].id;
+          checkin.eventName = activeEvts[0].name;
+        }
       }
 
       const now = Date.now();
