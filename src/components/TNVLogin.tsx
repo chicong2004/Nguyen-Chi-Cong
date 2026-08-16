@@ -1,10 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { registerTNV, loginTNV } from '../services/dataService';
+import { registerTNV, loginTNV, getDepartmentsList } from '../services/dataService';
 
-export default function TNVLogin() {
+interface TNVLoginProps {
+  initialIsLogin?: boolean;
+}
+
+export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const { setCurrentSessionUser, isLocalStorageMode } = useAuth();
-  const [isLogin, setIsLogin] = useState(false); // Default to register tab for easy data collection!
+  const [isLogin, setIsLogin] = useState(initialIsLogin);
+  const [departments, setDepartments] = useState<string[]>([]);
+
+  useEffect(() => {
+    setIsLogin(initialIsLogin);
+    setDepartments(getDepartmentsList());
+  }, [initialIsLogin]);
 
   // Form State
   const [email, setEmail] = useState('');
@@ -42,10 +52,10 @@ export default function TNVLogin() {
           notes,
           password,
         });
-        setSuccess('Đăng ký thành công! Đang đăng nhập...');
+        setSuccess('Đăng ký thành công! Đang tự động chuyển đến tài khoản...');
         setTimeout(() => {
           setCurrentSessionUser(newUser);
-        }, 1000);
+        }, 800);
       }
     } catch (err: any) {
       console.error(err);
@@ -70,120 +80,104 @@ export default function TNVLogin() {
           </svg>
         </div>
         <h2 className="text-2xl font-bold text-gray-900">
-          {isLogin ? 'Đăng nhập TNV / CTV' : 'Đăng ký TNV / CTV Mới'}
+          {isLogin ? 'Đăng Nhập TNV / CTV' : 'Đăng Ký TNV / CTV Mới'}
         </h2>
-        <p className="text-sm text-gray-500 mt-1">
-          {isLogin ? 'Điền email và mật khẩu để vào bảng điểm danh' : 'Điền thông tin để đăng ký vào đội ngũ Tình nguyện viên'}
+        <p className="text-xs text-gray-500 mt-1">
+          {isLogin ? 'Điền email đã đăng ký để vào bảng cá nhân' : 'Điền thông tin cá nhân để đăng ký vào đội ngũ Tình nguyện viên'}
         </p>
       </div>
 
-      {/* Mode Status Pill */}
-      <div className="mb-4 text-center">
-        {isLocalStorageMode ? (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-emerald-50 text-emerald-700 border border-emerald-200">
-            <span className="w-2 h-2 mr-1.5 bg-emerald-500 rounded-full animate-pulse"></span>
-            Chế độ Lưu trữ Cục bộ (Sẵn sàng sử dụng)
-          </span>
-        ) : (
-          <span className="inline-flex items-center px-2.5 py-1 rounded-full text-xs font-medium bg-blue-50 text-blue-700 border border-blue-200">
-            🟢 Kết nối Cloud Supabase
-          </span>
-        )}
-      </div>
-
-      {error && <div className="p-3 mb-4 text-sm text-red-600 bg-red-50 border border-red-100 rounded-xl">{error}</div>}
-      {success && <div className="p-3 mb-4 text-sm text-green-600 bg-green-50 border border-green-100 rounded-xl">{success}</div>}
+      {error && <div className="p-3 mb-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl">{error}</div>}
+      {success && <div className="p-3 mb-4 text-xs text-green-600 bg-green-50 border border-green-100 rounded-xl">{success}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {!isLogin && (
           <>
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Họ và Tên <span className="text-red-500">*</span></label>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Họ và Tên <span className="text-red-500">*</span></label>
               <input
                 type="text"
                 value={fullName}
                 onChange={(e) => setFullName(e.target.value)}
                 required
                 placeholder="VD: Nguyễn Văn An"
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
               />
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Số điện thoại <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Số điện thoại <span className="text-red-500">*</span></label>
                 <input
                   type="tel"
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   required
                   placeholder="0901234567"
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
                 />
               </div>
 
               <div>
-                <label className="block text-sm font-semibold text-gray-700 mb-1">Bộ phận đăng ký <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Bộ phận đăng ký <span className="text-red-500">*</span></label>
                 <select
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
-                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition bg-white"
+                  className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition bg-white text-xs font-bold"
                 >
-                  <option value="Hậu cần">Hậu cần</option>
-                  <option value="Truyền thông">Truyền thông</option>
-                  <option value="Sự kiện">Sự kiện</option>
-                  <option value="Tài trợ">Tài trợ</option>
-                  <option value="Nhân sự">Nhân sự</option>
+                  {departments.map(dep => (
+                    <option key={dep} value={dep}>{dep}</option>
+                  ))}
                 </select>
               </div>
             </div>
 
             <div>
-              <label className="block text-sm font-semibold text-gray-700 mb-1">Link Facebook / Zalo</label>
+              <label className="block text-xs font-semibold text-gray-700 mb-1">Link Facebook / Zalo</label>
               <input
                 type="url"
                 value={facebookLink}
                 onChange={(e) => setFacebookLink(e.target.value)}
                 placeholder="https://facebook.com/..."
-                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+                className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
               />
             </div>
           </>
         )}
 
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">Email <span className="text-red-500">*</span></label>
           <input
             type="email"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
             required
             placeholder="example@gmail.com"
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
           />
         </div>
 
         <div>
-          <label className="block text-sm font-semibold text-gray-700 mb-1">Mật khẩu <span className="text-red-500">*</span></label>
+          <label className="block text-xs font-semibold text-gray-700 mb-1">Mật khẩu <span className="text-red-500">*</span></label>
           <input
             type="password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             required
             placeholder="••••••••"
-            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition"
+            className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
           />
         </div>
 
         {!isLogin && (
           <div>
-            <label className="block text-sm font-semibold text-gray-700 mb-1">Ghi chú / Khung giờ rảnh</label>
+            <label className="block text-xs font-semibold text-gray-700 mb-1">Ghi chú / Khung giờ rảnh</label>
             <textarea
               rows={2}
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
-              placeholder="VD: Có thể tham gia ca sáng thứ 7 và cả ngày chủ nhật..."
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 focus:border-blue-500 outline-none transition resize-none"
+              placeholder="VD: Rảnh các ngày thứ 7 và chủ nhật..."
+              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs resize-none"
             />
           </div>
         )}
@@ -191,7 +185,7 @@ export default function TNVLogin() {
         <button
           type="submit"
           disabled={loading}
-          className="w-full py-3 bg-blue-600 text-white rounded-xl font-semibold shadow-md hover:bg-blue-700 focus:ring-4 focus:ring-blue-100 transition active:scale-[0.99] disabled:opacity-50"
+          className="w-full py-3 bg-blue-600 text-white rounded-xl font-bold text-sm shadow-md hover:bg-blue-700 focus:ring-4 focus:ring-blue-100 transition active:scale-[0.99] disabled:opacity-50"
         >
           {loading ? 'Đang xử lý...' : (isLogin ? 'Đăng nhập ngay' : 'Hoàn tất Đăng ký')}
         </button>
@@ -209,13 +203,13 @@ export default function TNVLogin() {
         </div>
       )}
 
-      <div className="mt-6 text-center text-sm text-gray-600 pt-4 border-t border-gray-100">
+      <div className="mt-6 text-center text-xs text-gray-600 pt-4 border-t border-gray-100">
         {isLogin ? "Bạn chưa có tài khoản? " : "Bạn đã đăng ký trước đó? "}
         <button
           onClick={() => { setIsLogin(!isLogin); setError(''); setSuccess(''); }}
           className="text-blue-600 font-bold hover:underline focus:outline-none"
         >
-          {isLogin ? 'Tạo tài khoản mới' : 'Đăng nhập'}
+          {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
         </button>
       </div>
     </div>

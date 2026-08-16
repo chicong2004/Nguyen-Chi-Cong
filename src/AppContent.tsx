@@ -7,7 +7,7 @@ import AdminDashboard from './components/AdminDashboard';
 
 function AppContent() {
   const { currentUser, loading, isLocalStorageMode } = useAuth();
-  const [loginMode, setLoginMode] = useState<'tnv' | 'admin' | null>(null);
+  const [activeTab, setActiveTab] = useState<'tnv-login' | 'tnv-register' | 'admin-login'>('tnv-register');
 
   if (loading) {
     return (
@@ -18,7 +18,7 @@ function AppContent() {
     );
   }
 
-  // If logged in
+  // If logged in, show respective dashboard
   if (currentUser) {
     if (currentUser.role === 'admin') {
       return <AdminDashboard />;
@@ -27,85 +27,86 @@ function AppContent() {
     }
   }
 
-  // If not logged in and a mode is selected
-  if (loginMode === 'tnv') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <TNVLogin />
-        <button 
-          onClick={() => setLoginMode(null)} 
-          className="mt-6 text-sm font-medium text-gray-500 hover:text-gray-900 transition flex items-center gap-1"
-        >
-          ← Quay lại trang chủ
-        </button>
-      </div>
-    );
-  }
-
-  if (loginMode === 'admin') {
-    return (
-      <div className="min-h-screen bg-gray-50 flex flex-col items-center justify-center p-4">
-        <AdminLogin />
-        <button 
-          onClick={() => setLoginMode(null)} 
-          className="mt-6 text-sm font-medium text-gray-500 hover:text-gray-900 transition flex items-center gap-1"
-        >
-          ← Quay lại trang chủ
-        </button>
-      </div>
-    );
-  }
-
-  // Landing Page
+  // Landing Page with direct Login & Registration integrated!
   return (
-    <div className="min-h-screen bg-gradient-to-b from-blue-50/50 via-white to-gray-50 flex flex-col">
-      <main className="flex-1 flex flex-col items-center justify-center p-6 text-center max-w-xl mx-auto">
-        {/* Status Pill */}
-        <div className="mb-6">
-          {isLocalStorageMode ? (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-emerald-100 text-emerald-800 border border-emerald-200 shadow-2xs">
-              <span className="w-2 h-2 mr-2 bg-emerald-500 rounded-full animate-pulse"></span>
-              Lưu trữ Cục bộ LocalStorage (Đã sẵn sàng sử dụng 100%)
-            </span>
+    <div className="min-h-screen bg-gradient-to-b from-blue-50/60 via-white to-gray-50 flex flex-col justify-between p-4 sm:p-6">
+      <header className="max-w-xl mx-auto w-full flex items-center justify-between py-2">
+        <div className="flex items-center gap-2">
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md font-bold">
+            TNV
+          </div>
+          <span className="font-black text-gray-900 text-lg tracking-tight">Xanthic Mix App</span>
+        </div>
+
+        {isLocalStorageMode ? (
+          <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-1 rounded-full border border-emerald-200">
+            LocalStorage Active
+          </span>
+        ) : (
+          <span className="text-[11px] font-semibold bg-blue-100 text-blue-800 px-2.5 py-1 rounded-full border border-blue-200">
+            🟢 Supabase Cloud Sync
+          </span>
+        )}
+      </header>
+
+      <main className="max-w-md mx-auto w-full my-6 space-y-6">
+        <div className="text-center">
+          <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight mb-2">
+            Hệ Thống Đăng Ký & Quản Lý TNV
+          </h1>
+          <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto">
+            Đăng ký bộ phận, lịch làm việc, nhận email thông báo duyệt lịch tự động từ Admin.
+          </p>
+        </div>
+
+        {/* Home Direct Login / Register Tabs */}
+        <div className="bg-gray-200/80 p-1.5 rounded-2xl grid grid-cols-3 gap-1 text-center shadow-inner">
+          <button
+            onClick={() => setActiveTab('tnv-register')}
+            className={`py-2 text-xs font-bold rounded-xl transition ${
+              activeTab === 'tnv-register'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            📝 Đăng Ký TNV
+          </button>
+
+          <button
+            onClick={() => setActiveTab('tnv-login')}
+            className={`py-2 text-xs font-bold rounded-xl transition ${
+              activeTab === 'tnv-login'
+                ? 'bg-blue-600 text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            🔑 Đăng Nhập
+          </button>
+
+          <button
+            onClick={() => setActiveTab('admin-login')}
+            className={`py-2 text-xs font-bold rounded-xl transition ${
+              activeTab === 'admin-login'
+                ? 'bg-gray-900 text-white shadow-sm'
+                : 'text-gray-600 hover:text-gray-900'
+            }`}
+          >
+            👑 Admin
+          </button>
+        </div>
+
+        {/* Form Container embedded right on the Home Page! */}
+        <div className="w-full flex justify-center">
+          {activeTab === 'admin-login' ? (
+            <AdminLogin />
           ) : (
-            <span className="inline-flex items-center px-3 py-1 rounded-full text-xs font-semibold bg-blue-100 text-blue-800 border border-blue-200">
-              🟢 Kết nối Cloud Supabase Active
-            </span>
+            <TNVLogin initialIsLogin={activeTab === 'tnv-login'} />
           )}
-        </div>
-
-        <div className="w-20 h-20 bg-blue-600 rounded-3xl flex items-center justify-center mb-6 shadow-xl shadow-blue-500/20 text-white">
-          <svg className="w-10 h-10" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197M13 7a4 4 0 11-8 0 4 4 0 018 0z" />
-          </svg>
-        </div>
-
-        <h1 className="text-3xl sm:text-4xl font-black text-gray-900 mb-4 tracking-tight">
-          Hệ Thống Đăng Ký & Điểm Danh TNV
-        </h1>
-        <p className="text-gray-600 mb-8 leading-relaxed max-w-md text-sm sm:text-base">
-          Thu thập thông tin đăng ký Tình nguyện viên/CTV, ghi nhận điểm danh ca làm việc và tự động tính bảng lương xuất file CSV.
-        </p>
-
-        <div className="w-full space-y-3.5">
-          <button
-            onClick={() => setLoginMode('tnv')}
-            className="w-full py-4 bg-blue-600 text-white rounded-2xl font-bold text-lg shadow-md hover:bg-blue-700 hover:shadow-lg transition active:scale-[0.99] flex items-center justify-center gap-2"
-          >
-            <span>📝 Đăng ký / Điểm danh TNV</span>
-          </button>
-          
-          <button
-            onClick={() => setLoginMode('admin')}
-            className="w-full py-4 bg-white text-gray-900 border-2 border-gray-200 rounded-2xl font-bold text-lg hover:border-gray-300 hover:bg-gray-50 transition active:scale-[0.99] flex items-center justify-center gap-2"
-          >
-            <span>🔑 Quản trị viên (Admin)</span>
-          </button>
         </div>
       </main>
 
-      <footer className="py-6 text-center text-xs text-gray-400 border-t border-gray-100">
-        Hệ thống Quản lý TNV/CTV &bull; Đã sẵn sàng đưa lên Vercel
+      <footer className="py-4 text-center text-xs text-gray-400 border-t border-gray-100">
+        Hệ thống Quản lý TNV/CTV &bull; Email gửi: chicong092004@gmail.com
       </footer>
     </div>
   );

@@ -1,5 +1,5 @@
 import React, { useEffect, useRef, useState } from 'react';
-import { Html5QrcodeScanner } from 'html5-qrcode';
+import { Html5Qrcode } from 'html5-qrcode';
 
 interface QRScannerModalProps {
   isOpen: boolean;
@@ -10,44 +10,74 @@ interface QRScannerModalProps {
 
 export default function QRScannerModal({ isOpen, onClose, onScanSuccess, title }: QRScannerModalProps) {
   const [manualCode, setManualCode] = useState('');
-  const [cameraError, setCameraError] = useState(false);
-  const scannerRef = useRef<Html5QrcodeScanner | null>(null);
+  const [isCameraActive, setIsCameraActive] = useState(false);
+  const [errorMessage, setErrorMessage] = useState('');
+  const html5QrcodeRef = useRef<Html5Qrcode | null>(null);
+
+  // Play audio beep feedback on scan success
+  const playBeep = () => {
+    try {
+      const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)();
+      const osc = audioCtx.createOscillator();
+      const gain = audioCtx.createGain();
+      osc.type = 'sine';
+      osc.frequency.setValueAtTime(880, audioCtx.currentTime); // A5 note
+      gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+      osc.connect(gain);
+      gain.connect(audioCtx.destination);
+      osc.start();
+      osc.stop(audioCtx.currentTime + 0.15);
+    } catch {}
+  };
 
   useEffect(() => {
     if (!isOpen) return;
 
-    // Initialize scanner
-    const timer = setTimeout(() => {
+    let isSubscribed = true;
+    setErrorMessage('');
+    setIsCameraActive(false);
+
+    // AUTO-OPEN CAMERA IMMEDIATELY ON MOUNT
+    const startCamera = async () => {
       try {
-        const scanner = new Html5QrcodeScanner(
-          'qr-reader-container',
-          { fps: 10, qrbox: { width: 250, height: 250 } },
-          /* verbose= */ false
-        );
+        const element = document.getElementById('qr-camera-feed');
+        if (!element) return;
 
-        scanner.render(
+        const html5Qrcode = new Html5Qrcode('qr-camera-feed');
+        html5QrcodeRef.current = html5Qrcode;
+
+        await html5Qrcode.start(
+          { facingMode: 'environment' },
+          { fps: 15, qrbox: { width: 240, height: 240 } },
           (decodedText) => {
-            onScanSuccess(decodedText);
-            scanner.clear().catch(console.error);
-            onClose();
+            if (isSubscribed) {
+              playBeep();
+              onScanSuccess(decodedText);
+              html5Qrcode.stop().catch(() => {});
+              onClose();
+            }
           },
-          (errorMessage) => {
-            // Ignore frame parse errors
-          }
+          () => {} // frame parse errors ignored
         );
 
-        scannerRef.current = scanner;
-      } catch (err) {
-        console.error("Lỗi mở camera QR scanner:", err);
-        setCameraError(true);
+        if (isSubscribed) {
+          setIsCameraActive(true);
+        }
+      } catch (err: any) {
+        console.warn("Lỗi tự động mở camera:", err);
+        if (isSubscribed) {
+          setErrorMessage("Không thể tự động mở Camera (Vui lòng cấp quyền Camera hoặc nhập mã bên dưới).");
+        }
       }
-    }, 300);
+    };
+
+    startCamera();
 
     return () => {
-      clearTimeout(timer);
-      if (scannerRef.current) {
-        scannerRef.current.clear().catch(() => {});
-        scannerRef.current = null;
+      isSubscribed = false;
+      if (html5QrcodeRef.current && html5QrcodeRef.current.isScanning) {
+        html5QrcodeRef.current.stop().catch(() => {});
+        html5QrcodeRef.current = null;
       }
     };
   }, [isOpen]);
@@ -63,7 +93,7 @@ export default function QRScannerModal({ isOpen, onClose, onScanSuccess, title }
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs animate-fade-in">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/75 backdrop-blur-xs animate-fade-in">
       <div className="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl relative border border-gray-100">
         <button
           onClick={onClose}
@@ -72,34 +102,46 @@ export default function QRScannerModal({ isOpen, onClose, onScanSuccess, title }
           ✕
         </button>
 
-        <h3 className="text-xl font-bold text-gray-900 text-center mb-1">
-          {title || '📷 Quét Mã QR Điểm Danh'}
+        <h3 className="text-xl font-black text-gray-900 text-center mb-1 flex items-center justify-center gap-2">
+          <span>📷</span> {title || 'Quét QR Điểm Danh Sự Kiện'}
         </h3>
         <p className="text-xs text-gray-500 text-center mb-4">
-          Hướng camera về phía mã QR để hệ thống tự động quét và duyệt điểm danh
+          Camera đang được mở tự động &bull; Đưa mã QR vào khung hình để ghi nhận ca làm
         </p>
 
-        {/* Camera Container */}
-        <div className="overflow-hidden rounded-2xl border-2 border-dashed border-blue-200 bg-gray-50 min-h-[260px] flex items-center justify-center mb-4">
-          <div id="qr-reader-container" className="w-full"></div>
+        {errorMessage && (
+          <div className="p-3 mb-3 text-xs text-amber-700 bg-amber-50 rounded-xl border border-amber-200">
+            ⚠️ {errorMessage}
+          </div>
+        )}
+
+        {/* Camera Live Feed */}
+        <div className="overflow-hidden rounded-2xl border-2 border-dashed border-purple-300 bg-black min-h-[260px] flex items-center justify-center mb-4 relative shadow-inner">
+          <div id="qr-camera-feed" className="w-full"></div>
+          {!isCameraActive && !errorMessage && (
+            <div className="absolute text-white text-xs font-semibold flex items-center gap-2">
+              <span className="animate-spin rounded-full h-4 w-4 border-2 border-white border-t-transparent"></span>
+              Đang bật Camera tự động...
+            </div>
+          )}
         </div>
 
         {/* Manual Code Input fallback */}
         <form onSubmit={handleManualSubmit} className="pt-2 border-t border-gray-100">
-          <label className="block text-xs font-semibold text-gray-600 mb-1">
-            Hoặc nhập mã QR / ID thủ công:
+          <label className="block text-xs font-bold text-gray-700 mb-1">
+            Nhập mã QR / ID thủ công:
           </label>
           <div className="flex gap-2">
             <input
               type="text"
               value={manualCode}
               onChange={(e) => setManualCode(e.target.value)}
-              placeholder="Dán mã QR hoặc ID tại đây..."
-              className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
+              placeholder="Dán mã QR tại đây..."
+              className="flex-1 px-3 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500"
             />
             <button
               type="submit"
-              className="px-4 py-2 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition"
+              className="px-4 py-2 bg-purple-600 text-white rounded-xl text-xs font-bold hover:bg-purple-700 transition"
             >
               Gửi mã
             </button>
