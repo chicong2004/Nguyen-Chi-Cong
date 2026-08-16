@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { updateUserProfileByAdmin } from '../services/dataService';
+import { updateUserProfileByAdmin, getDepartmentsList } from '../services/dataService';
 
 interface AdminEditUserModalProps {
   user: User | null;
@@ -121,13 +121,11 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
               >
-                <option value="Hậu cần">Hậu cần</option>
-                <option value="Truyền thông">Truyền thông</option>
-                <option value="Sự kiện">Sự kiện</option>
-                <option value="Tài trợ">Tài trợ</option>
-                <option value="Nhân sự">Nhân sự</option>
+                {getDepartmentsList().map(dep => (
+                  <option key={dep} value={dep}>{dep}</option>
+                ))}
               </select>
             </div>
 
