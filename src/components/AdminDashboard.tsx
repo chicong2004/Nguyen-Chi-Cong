@@ -1,19 +1,26 @@
 import React, { useEffect, useState, useMemo } from 'react';
-import { supabase } from '../supabase';
 import { useAuth } from './AuthContext';
 import { User, Checkin } from '../types';
+import { 
+  fetchAllUsers, 
+  fetchCheckins, 
+  approveCheckinItem, 
+  bulkApproveCheckinsList, 
+  updateUserSalary,
+  removeUser 
+} from '../services/dataService';
 import { format } from 'date-fns';
 import Papa from 'papaparse';
 
 export default function AdminDashboard() {
-  const { refreshProfile } = useAuth();
+  const { logout, isLocalStorageMode } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
   
-  // Active Tab
-  const departments = useMemo(() => Array.from(new Set(users.map(u => u.department))), [users]);
-  const [activeTab, setActiveTab] = useState<string>('');
+  // Search & Filter
+  const [searchTerm, setSearchTerm] = useState('');
+  const [activeTab, setActiveTab] = useState<string>('Tất cả');
 
   // Selected checkins for bulk approve
   const [selectedCheckins, setSelectedCheckins] = useState<Set<string>>(new Set());
@@ -22,66 +29,51 @@ export default function AdminDashboard() {
   const [editingSalaryUser, setEditingSalaryUser] = useState<string | null>(null);
   const [editSalaryValue, setEditSalaryValue] = useState<string>('');
 
-  const fetchData = async () => {
-    const { data: usersData } = await supabase.from('users').select('*').eq('role', 'tnv');
-    if (usersData) {
-      setUsers(usersData.map(d => ({
-        id: d.id,
-        role: d.role,
-        fullName: d.full_name,
-        phone: d.phone,
-        facebookLink: d.facebook_link,
-        department: d.department,
-        salaryRate: d.salary_rate,
-        createdAt: d.created_at,
-        updatedAt: d.updated_at,
-      })));
+  const loadAllData = async () => {
+    try {
+      const allUsers = await fetchAllUsers();
+      const allCheckins = await fetchCheckins();
+      setUsers(allUsers.filter(u => u.role === 'tnv'));
+      setCheckins(allCheckins);
+    } catch (err) {
+      console.error("Lỗi lấy dữ liệu Admin:", err);
+    } finally {
+      setLoading(false);
     }
-
-    const { data: checkinsData } = await supabase.from('checkins').select('*').order('created_at', { ascending: false });
-    if (checkinsData) {
-      setCheckins(checkinsData.map(d => ({
-        id: d.id,
-        userId: d.user_id,
-        fullName: d.full_name,
-        department: d.department,
-        status: d.status,
-        createdAt: d.created_at,
-        updatedAt: d.updated_at,
-      })));
-    }
-    setLoading(false);
   };
 
   useEffect(() => {
-    fetchData();
-
-    const usersSub = supabase.channel('public:users')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => fetchData())
-      .subscribe();
-      
-    const checkinsSub = supabase.channel('public:checkins_admin')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checkins' }, () => fetchData())
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(usersSub);
-      supabase.removeChannel(checkinsSub);
-    };
+    loadAllData();
   }, []);
 
-  useEffect(() => {
-    if (departments.length > 0 && !activeTab) {
-      setActiveTab(departments[0]);
-    }
-  }, [departments, activeTab]);
+  const departments = useMemo(() => {
+    const deps = Array.from(new Set(users.map(u => u.department)));
+    return ['Tất cả', ...deps];
+  }, [users]);
 
-  const handleApprove = async (checkinId: string) => {
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      const matchesTab = activeTab === 'Tất cả' || u.department === activeTab;
+      const matchesSearch = 
+        u.fullName.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        u.phone.includes(searchTerm) ||
+        u.email.toLowerCase().includes(searchTerm.toLowerCase());
+      return matchesTab && matchesSearch;
+    });
+  }, [users, activeTab, searchTerm]);
+
+  // Total statistics
+  const totalApprovedCheckins = checkins.filter(c => c.status === 'approved').length;
+  const totalPendingCheckins = checkins.filter(c => c.status === 'pending').length;
+  const totalPayroll = users.reduce((sum, u) => {
+    const userApprovedCount = checkins.filter(c => c.userId === u.id && c.status === 'approved').length;
+    return sum + (userApprovedCount * (u.salaryRate || 50000));
+  }, 0);
+
+  const handleApproveSingle = async (checkinId: string) => {
     try {
-      await supabase.from('checkins').update({
-        status: 'approved',
-        updated_at: Date.now()
-      }).eq('id', checkinId);
+      await approveCheckinItem(checkinId);
+      await loadAllData();
     } catch (err) {
       console.error(err);
       alert("Lỗi khi duyệt ca.");
@@ -91,11 +83,9 @@ export default function AdminDashboard() {
   const handleBulkApprove = async () => {
     if (selectedCheckins.size === 0) return;
     try {
-      const idsArray = Array.from(selectedCheckins);
-      await supabase.from('checkins')
-        .update({ status: 'approved', updated_at: Date.now() })
-        .in('id', idsArray);
+      await bulkApproveCheckinsList(Array.from(selectedCheckins));
       setSelectedCheckins(new Set());
+      await loadAllData();
     } catch (err) {
       console.error(err);
       alert("Lỗi khi duyệt hàng loạt.");
@@ -113,31 +103,56 @@ export default function AdminDashboard() {
     const val = parseInt(editSalaryValue, 10);
     if (isNaN(val)) return;
     try {
-      await supabase.from('users').update({
-        salary_rate: val,
-        updated_at: Date.now()
-      }).eq('id', uid);
+      await updateUserSalary(uid, val);
       setEditingSalaryUser(null);
-      refreshProfile();
+      await loadAllData();
     } catch (err) {
       console.error(err);
       alert("Lỗi cập nhật lương.");
     }
   };
 
-  const handleExportCSV = () => {
+  const handleDeleteUser = async (uid: string, name: string) => {
+    if (confirm(`Bạn có chắc chắn muốn xoá TNV "${name}" khỏi hệ thống?`)) {
+      await removeUser(uid);
+      await loadAllData();
+    }
+  };
+
+  // CSV Exports
+  const handleExportRegistrationsCSV = () => {
+    const exportData = users.map(user => ({
+      'Họ và Tên': user.fullName,
+      'Email': user.email,
+      'Số điện thoại': `"${user.phone}"`,
+      'Link Facebook / Zalo': user.facebookLink || '',
+      'Bộ phận': user.department,
+      'Ghi chú / Khung rảnh': user.notes || '',
+      'Ngày đăng ký': format(user.createdAt, 'dd/MM/yyyy HH:mm'),
+    }));
+
+    const csv = Papa.unparse(exportData);
+    const blob = new Blob(['\uFEFF' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `Danh_Sach_Dang_Ky_TNV_${format(new Date(), 'dd_MM_yyyy')}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  };
+
+  const handleExportPayrollCSV = () => {
     const exportData = users.map(user => {
       const userCheckins = checkins.filter(c => c.userId === user.id && c.status === 'approved');
       const approvedShifts = userCheckins.length;
-      const totalSalary = approvedShifts * (user.salaryRate || 0);
+      const totalSalary = approvedShifts * (user.salaryRate || 50000);
       return {
         'Họ và Tên': user.fullName,
         'Số điện thoại': `"${user.phone}"`,
-        'Link Facebook': user.facebookLink || '',
         'Bộ phận': user.department,
+        'Mức lương/ca (VND)': user.salaryRate || 50000,
         'Số ca đã duyệt': approvedShifts,
-        'Mức lương/ca (VND)': user.salaryRate || 0,
-        'Tổng lương (VND)': totalSalary
+        'Tổng lương nhận (VND)': totalSalary,
       };
     });
 
@@ -146,189 +161,282 @@ export default function AdminDashboard() {
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.download = `Bang_Luong_TNV_${format(new Date(), 'dd_MM_yyyy')}.csv`;
+    link.download = `Bang_Tinh_Luong_TNV_${format(new Date(), 'dd_MM_yyyy')}.csv`;
     link.click();
     URL.revokeObjectURL(url);
   };
 
-  const handleSignOut = async () => {
-    await supabase.auth.signOut();
-  };
+  if (loading) return <div className="p-12 text-center text-gray-500 font-medium">Đang tải dữ liệu hệ thống Admin...</div>;
 
-  if (loading) return <div className="p-10 text-center text-gray-500">Đang tải dữ liệu...</div>;
-
-  const filteredUsers = users.filter(u => u.department === activeTab);
-  
   return (
-    <div className="min-h-screen bg-gray-50 text-gray-800">
-      {/* Header */}
-      <header className="bg-white shadow-sm px-6 py-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4">
-        <div>
-          <h1 className="text-2xl font-bold">Admin Dashboard</h1>
-          <p className="text-sm text-gray-500">Quản lý điểm danh và tính lương TNV/CTV</p>
-        </div>
-        <div className="flex gap-3">
-          <button
-            onClick={handleExportCSV}
-            className="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-lg hover:bg-green-700 transition"
-          >
-            Xuất file CSV
-          </button>
-          <button
-            onClick={handleSignOut}
-            className="px-4 py-2 bg-gray-100 text-gray-700 text-sm font-medium rounded-lg hover:bg-gray-200 transition"
-          >
-            Đăng xuất
-          </button>
+    <div className="min-h-screen bg-gray-50 text-gray-900 pb-16">
+      {/* Top Bar */}
+      <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20 shadow-sm">
+        <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              <h1 className="text-2xl font-black tracking-tight text-gray-900">Quản Trị Viên (Admin)</h1>
+              {isLocalStorageMode ? (
+                <span className="text-[11px] font-semibold bg-emerald-100 text-emerald-800 px-2.5 py-0.5 rounded-full border border-emerald-200">
+                  LocalStorage Mode
+                </span>
+              ) : (
+                <span className="text-[11px] font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full border border-blue-200">
+                  Supabase Cloud
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-gray-500 mt-0.5">Thu thập dữ liệu đăng ký, duyệt điểm danh & quản lý lương TNV/CTV</p>
+          </div>
+
+          <div className="flex flex-wrap gap-2.5">
+            <button
+              onClick={handleExportRegistrationsCSV}
+              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+              </svg>
+              Xuất Đăng Ký (CSV)
+            </button>
+
+            <button
+              onClick={handleExportPayrollCSV}
+              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+            >
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
+              </svg>
+              Xuất Bảng Lương (CSV)
+            </button>
+
+            <button
+              onClick={logout}
+              className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition"
+            >
+              Đăng xuất
+            </button>
+          </div>
         </div>
       </header>
 
-      <main className="max-w-7xl mx-auto p-6">
-        {/* Tabs */}
-        <div className="flex space-x-2 border-b border-gray-200 mb-6 overflow-x-auto pb-1 scrollbar-hide">
-          {departments.length === 0 && <div className="text-gray-500 text-sm">Chưa có dữ liệu TNV.</div>}
-          {departments.map(dep => (
-            <button
-              key={dep}
-              onClick={() => setActiveTab(dep)}
-              className={`px-4 py-2 text-sm font-medium whitespace-nowrap border-b-2 transition-colors ${
-                activeTab === dep ? 'border-blue-600 text-blue-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'
-              }`}
-            >
-              {dep}
-            </button>
-          ))}
+      <main className="max-w-7xl mx-auto p-6 space-y-6">
+        {/* Metric Cards */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tổng TNV Đăng ký</span>
+            <div className="text-3xl font-black text-gray-900 mt-2">{users.length} <span className="text-sm font-normal text-gray-500">người</span></div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Ca làm chờ duyệt</span>
+            <div className="text-3xl font-black text-amber-600 mt-2">{totalPendingCheckins} <span className="text-sm font-normal text-gray-500">ca</span></div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Ca làm đã duyệt</span>
+            <div className="text-3xl font-black text-emerald-600 mt-2">{totalApprovedCheckins} <span className="text-sm font-normal text-gray-500">ca</span></div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
+            <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">Tổng quỹ lương dự kiến</span>
+            <div className="text-3xl font-black text-blue-600 mt-2">{totalPayroll.toLocaleString()} <span className="text-xs font-normal text-gray-500">VND</span></div>
+          </div>
         </div>
 
-        {/* Content */}
-        {departments.length > 0 && (
-          <div className="space-y-8">
-            {/* List of TNVs and their Checkins in Active Tab */}
+        {/* Search & Filter Header */}
+        <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
+          {/* Department Tabs */}
+          <div className="flex space-x-1 overflow-x-auto w-full md:w-auto pb-1 scrollbar-hide">
+            {departments.map(dep => (
+              <button
+                key={dep}
+                onClick={() => setActiveTab(dep)}
+                className={`px-4 py-2 text-xs font-bold rounded-xl whitespace-nowrap transition ${
+                  activeTab === dep 
+                    ? 'bg-gray-900 text-white shadow-sm' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                }`}
+              >
+                {dep}
+              </button>
+            ))}
+          </div>
+
+          {/* Search Input */}
+          <div className="w-full md:w-72">
+            <input
+              type="text"
+              value={searchTerm}
+              onChange={(e) => setSearchTerm(e.target.value)}
+              placeholder="🔍 Tìm theo Tên, SĐT, Email..."
+              className="w-full px-4 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-gray-900 bg-gray-50"
+            />
+          </div>
+        </div>
+
+        {/* Bulk Approve Banner */}
+        {selectedCheckins.size > 0 && (
+          <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-md flex items-center justify-between">
+            <span className="text-sm font-bold">Đã chọn {selectedCheckins.size} ca điểm danh chờ duyệt</span>
+            <button
+              onClick={handleBulkApprove}
+              className="px-4 py-2 bg-white text-blue-700 font-bold text-xs rounded-xl shadow hover:bg-blue-50 transition"
+            >
+              DUYỆT TẤT CẢ CA ĐÃ CHỌN
+            </button>
+          </div>
+        )}
+
+        {/* Users List */}
+        {filteredUsers.length === 0 ? (
+          <div className="bg-white p-12 text-center rounded-2xl border border-gray-200 text-gray-500">
+            Không tìm thấy TNV nào phù hợp.
+          </div>
+        ) : (
+          <div className="space-y-6">
             {filteredUsers.map(user => {
               const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
               const approvedCount = userCheckins.filter(c => c.status === 'approved').length;
               const pendingCount = userCheckins.filter(c => c.status === 'pending').length;
+              const userTotalSalary = approvedCount * (user.salaryRate || 50000);
 
               return (
-                <div key={user.id} className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
-                  {/* User Info Header */}
-                  <div className="p-5 border-b border-gray-100 flex flex-col md:flex-row justify-between items-start md:items-center gap-4 bg-gray-50/50">
+                <div key={user.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
+                  {/* User Profile Bar */}
+                  <div className="p-5 border-b border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/60">
                     <div>
-                      <h3 className="font-semibold text-lg">{user.fullName}</h3>
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-sm text-gray-600 mt-1">
-                        <span>📱 {user.phone}</span>
-                        {user.facebookLink && (
-                          <a href={user.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">
-                            🔗 Facebook
-                          </a>
-                        )}
-                        <span className="font-medium text-gray-800 bg-gray-200 px-2 rounded">
-                          Đã duyệt: {approvedCount} ca
+                      <div className="flex items-center gap-2">
+                        <h3 className="font-bold text-lg text-gray-900">{user.fullName}</h3>
+                        <span className="px-2.5 py-0.5 text-xs font-bold text-blue-700 bg-blue-100 rounded-full">
+                          {user.department}
                         </span>
                       </div>
+                      
+                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 mt-1">
+                        <span>📧 {user.email}</span>
+                        <span>📱 {user.phone}</span>
+                        {user.facebookLink && (
+                          <a href={user.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline">
+                            🔗 Facebook/Zalo
+                          </a>
+                        )}
+                        <span className="text-gray-400">📅 Đăng ký: {format(user.createdAt, 'dd/MM/yyyy')}</span>
+                      </div>
+
+                      {user.notes && (
+                        <div className="mt-2 text-xs bg-amber-50 text-amber-800 p-2 rounded-xl border border-amber-100 italic">
+                          📝 Ghi chú: {user.notes}
+                        </div>
+                      )}
                     </div>
-                    
-                    {/* Salary Setting */}
-                    <div className="flex items-center gap-3 bg-white p-2 rounded-lg border border-gray-200">
-                      <div className="text-sm">
-                        <span className="text-gray-500 block text-xs">Mức lương / ca:</span>
+
+                    {/* Salary Settings & Total */}
+                    <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                      {/* Rate per shift */}
+                      <div className="text-xs">
+                        <span className="text-gray-400 font-medium block">Mức lương / ca:</span>
                         {editingSalaryUser === user.id ? (
-                          <div className="flex items-center gap-2 mt-1">
+                          <div className="flex items-center gap-1.5 mt-1">
                             <input
                               type="number"
-                              className="w-24 px-2 py-1 text-sm border rounded outline-none"
+                              className="w-24 px-2 py-1 text-xs border rounded-lg outline-none font-bold"
                               value={editSalaryValue}
                               onChange={(e) => setEditSalaryValue(e.target.value)}
                             />
-                            <button onClick={() => saveSalary(user.id)} className="text-green-600 text-sm font-medium">Lưu</button>
-                            <button onClick={() => setEditingSalaryUser(null)} className="text-gray-500 text-sm font-medium">Huỷ</button>
+                            <button onClick={() => saveSalary(user.id)} className="text-emerald-600 font-bold hover:underline">Lưu</button>
+                            <button onClick={() => setEditingSalaryUser(null)} className="text-gray-400 hover:underline">Hủy</button>
                           </div>
                         ) : (
                           <div className="flex items-center gap-2 mt-1">
-                            <span className="font-semibold">{(user.salaryRate || 0).toLocaleString()} VND</span>
+                            <span className="font-bold text-gray-900">{(user.salaryRate || 50000).toLocaleString()} VND</span>
                             <button 
-                              onClick={() => { setEditingSalaryUser(user.id); setEditSalaryValue(user.salaryRate?.toString() || '0'); }}
-                              className="text-blue-600 text-xs hover:underline"
+                              onClick={() => { setEditingSalaryUser(user.id); setEditSalaryValue((user.salaryRate || 50000).toString()); }}
+                              className="text-blue-600 font-medium hover:underline text-[11px]"
                             >
                               Sửa
                             </button>
                           </div>
                         )}
                       </div>
-                      <div className="text-sm border-l border-gray-200 pl-3">
-                        <span className="text-gray-500 block text-xs">Tổng lương:</span>
-                        <span className="font-bold text-green-700">
-                          {(approvedCount * (user.salaryRate || 0)).toLocaleString()} VND
-                        </span>
+
+                      {/* Total Earned */}
+                      <div className="text-xs border-l border-gray-200 pl-4">
+                        <span className="text-gray-400 font-medium block">Tổng nhận ({approvedCount} ca):</span>
+                        <span className="font-black text-emerald-600 text-sm">{userTotalSalary.toLocaleString()} VND</span>
                       </div>
+
+                      {/* Remove TNV button */}
+                      <button
+                        onClick={() => handleDeleteUser(user.id, user.fullName)}
+                        title="Xoá TNV"
+                        className="text-gray-300 hover:text-red-600 p-1 transition"
+                      >
+                        🗑️
+                      </button>
                     </div>
                   </div>
 
-                  {/* Checkins List */}
+                  {/* Checkins Sub-table */}
                   <div className="p-5">
                     {userCheckins.length === 0 ? (
-                      <div className="text-sm text-gray-400">TNV này chưa có lịch sử điểm danh.</div>
+                      <div className="text-xs text-gray-400 font-medium italic">TNV này chưa điểm danh ca nào.</div>
                     ) : (
-                      <div>
-                        {pendingCount > 0 && (
-                          <div className="mb-3">
-                            <button
-                              onClick={handleBulkApprove}
-                              disabled={selectedCheckins.size === 0}
-                              className="text-xs px-3 py-1.5 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:opacity-50 transition"
-                            >
-                              Duyệt {selectedCheckins.size > 0 ? selectedCheckins.size : ''} ca đã chọn
-                            </button>
-                          </div>
-                        )}
-                        <div className="overflow-x-auto">
-                          <table className="w-full text-sm text-left">
-                            <thead className="text-xs text-gray-500 bg-gray-50 uppercase">
-                              <tr>
-                                <th className="px-4 py-2 w-10"></th>
-                                <th className="px-4 py-2">Thời gian</th>
-                                <th className="px-4 py-2">Trạng thái</th>
-                                <th className="px-4 py-2 text-right">Thao tác</th>
+                      <div className="overflow-x-auto">
+                        <table className="w-full text-xs text-left">
+                          <thead className="text-[11px] text-gray-400 bg-gray-50 uppercase font-semibold">
+                            <tr>
+                              <th className="px-3 py-2 w-8"></th>
+                              <th className="px-3 py-2">Ca làm việc</th>
+                              <th className="px-3 py-2">Thời gian điểm danh</th>
+                              <th className="px-3 py-2">Trạng thái</th>
+                              <th className="px-3 py-2 text-right">Thao tác</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {userCheckins.map(ci => (
+                              <tr key={ci.id} className="border-b border-gray-50 hover:bg-gray-50/50">
+                                <td className="px-3 py-2">
+                                  {ci.status === 'pending' && (
+                                    <input
+                                      type="checkbox"
+                                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                                      checked={selectedCheckins.has(ci.id)}
+                                      onChange={() => toggleSelection(ci.id)}
+                                    />
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 font-semibold text-gray-900">
+                                  {ci.shiftName || 'Ca làm việc'}
+                                </td>
+                                <td className="px-3 py-2 text-gray-600">
+                                  {format(ci.createdAt, 'HH:mm - dd/MM/yyyy')}
+                                </td>
+                                <td className="px-3 py-2">
+                                  {ci.status === 'pending' ? (
+                                    <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-200 text-[10px]">
+                                      ⏳ Chờ duyệt
+                                    </span>
+                                  ) : (
+                                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200 text-[10px]">
+                                      ✓ Đã duyệt
+                                    </span>
+                                  )}
+                                </td>
+                                <td className="px-3 py-2 text-right">
+                                  {ci.status === 'pending' && (
+                                    <button
+                                      onClick={() => handleApproveSingle(ci.id)}
+                                      className="px-2.5 py-1 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition"
+                                    >
+                                      Duyệt ca này
+                                    </button>
+                                  )}
+                                </td>
                               </tr>
-                            </thead>
-                            <tbody>
-                              {userCheckins.map(ci => (
-                                <tr key={ci.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                                  <td className="px-4 py-2">
-                                    {ci.status === 'pending' && (
-                                      <input
-                                        type="checkbox"
-                                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                        checked={selectedCheckins.has(ci.id)}
-                                        onChange={() => toggleSelection(ci.id)}
-                                      />
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-2 font-medium">
-                                    {format(ci.createdAt, 'HH:mm - dd/MM/yyyy')}
-                                  </td>
-                                  <td className="px-4 py-2">
-                                    {ci.status === 'pending' ? (
-                                      <span className="text-orange-600 bg-orange-50 px-2 py-0.5 rounded text-xs font-medium border border-orange-100">Chờ duyệt</span>
-                                    ) : (
-                                      <span className="text-green-600 bg-green-50 px-2 py-0.5 rounded text-xs font-medium border border-green-100">Đã duyệt</span>
-                                    )}
-                                  </td>
-                                  <td className="px-4 py-2 text-right">
-                                    {ci.status === 'pending' && (
-                                      <button
-                                        onClick={() => handleApprove(ci.id)}
-                                        className="text-blue-600 hover:text-blue-800 font-medium text-xs"
-                                      >
-                                        Duyệt ca này
-                                      </button>
-                                    )}
-                                  </td>
-                                </tr>
-                              ))}
-                            </tbody>
-                          </table>
-                        </div>
+                            ))}
+                          </tbody>
+                        </table>
                       </div>
                     )}
                   </div>

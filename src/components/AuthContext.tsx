@@ -1,88 +1,128 @@
 import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { User } from '../types';
-import { User as SupabaseUser } from '@supabase/supabase-js';
+import { 
+  isSupabaseConfigured, 
+  getLocalSession, 
+  setLocalSession, 
+  fetchAllUsers 
+} from '../services/dataService';
 
 interface AuthContextType {
-  currentUser: SupabaseUser | null;
+  currentUser: User | null;
   userProfile: User | null;
   loading: boolean;
+  isLocalStorageMode: boolean;
   refreshProfile: () => Promise<void>;
+  setCurrentSessionUser: (user: User | null) => void;
+  logout: () => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   userProfile: null,
   loading: true,
+  isLocalStorageMode: false,
   refreshProfile: async () => {},
+  setCurrentSessionUser: () => {},
+  logout: async () => {},
 });
 
 export const useAuth = () => useContext(AuthContext);
 
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  const [currentUser, setCurrentUser] = useState<SupabaseUser | null>(null);
-  const [userProfile, setUserProfile] = useState<User | null>(null);
+  const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const isLocalStorageMode = !isSupabaseConfigured();
 
-  const fetchProfile = async (userId: string) => {
-    const { data, error } = await supabase
-      .from('users')
-      .select('*')
-      .eq('id', userId)
-      .single();
-      
-    if (!error && data) {
-      setUserProfile({
-        id: data.id,
-        role: data.role,
-        fullName: data.full_name,
-        phone: data.phone,
-        facebookLink: data.facebook_link,
-        department: data.department,
-        salaryRate: data.salary_rate,
-        createdAt: data.created_at,
-        updatedAt: data.updated_at,
-      });
-    } else {
-      setUserProfile(null);
+  const loadSession = async () => {
+    try {
+      // First check if there is a active local session (e.g. Admin or Local TNV user)
+      const local = getLocalSession();
+      if (local) {
+        setCurrentUser(local);
+        setLoading(false);
+        return;
+      }
+
+      if (isSupabaseConfigured()) {
+        const { data: { session } } = await supabase.auth.getSession();
+        if (session?.user) {
+          const users = await fetchAllUsers();
+          const found = users.find(u => u.id === session.user.id);
+          if (found) {
+            setCurrentUser(found);
+          } else {
+            setCurrentUser({
+              id: session.user.id,
+              role: 'tnv',
+              fullName: session.user.email?.split('@')[0] || 'TNV User',
+              email: session.user.email || '',
+              phone: '',
+              department: 'Hậu cần',
+              salaryRate: 50000,
+              createdAt: Date.now(),
+              updatedAt: Date.now(),
+            });
+          }
+        } else {
+          setCurrentUser(null);
+        }
+      } else {
+        setCurrentUser(null);
+      }
+    } catch (err) {
+      console.error("Session load error:", err);
+      setCurrentUser(null);
+    } finally {
+      setLoading(false);
     }
   };
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setCurrentUser(session?.user ?? null);
-      if (session?.user) {
-        fetchProfile(session.user.id).finally(() => setLoading(false));
-      } else {
-        setLoading(false);
-      }
-    });
+    loadSession();
 
-    // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(
-      (_event, session) => {
-        setCurrentUser(session?.user ?? null);
-        if (session?.user) {
-          fetchProfile(session.user.id).finally(() => setLoading(false));
-        } else {
-          setUserProfile(null);
-          setLoading(false);
+    if (isSupabaseConfigured()) {
+      const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+        if (!session && !getLocalSession()) {
+          setCurrentUser(null);
         }
-      }
-    );
-
-    return () => subscription.unsubscribe();
+      });
+      return () => subscription.unsubscribe();
+    }
   }, []);
 
   const refreshProfile = async () => {
-    if (currentUser) {
-      await fetchProfile(currentUser.id);
+    await loadSession();
+  };
+
+  const setCurrentSessionUser = (user: User | null) => {
+    setCurrentUser(user);
+    setLocalSession(user);
+  };
+
+  const logout = async () => {
+    if (isSupabaseConfigured()) {
+      try {
+        await supabase.auth.signOut();
+      } catch (e) {
+        console.warn("Supabase signout notice:", e);
+      }
     }
+    setLocalSession(null);
+    setCurrentUser(null);
   };
 
   return (
-    <AuthContext.Provider value={{ currentUser, userProfile, loading, refreshProfile }}>
+    <AuthContext.Provider value={{
+      currentUser,
+      userProfile: currentUser,
+      loading,
+      isLocalStorageMode,
+      refreshProfile,
+      setCurrentSessionUser,
+      logout,
+    }}>
       {!loading && children}
     </AuthContext.Provider>
   );
