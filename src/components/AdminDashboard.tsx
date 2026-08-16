@@ -11,6 +11,7 @@ import {
   updateCheckinAdminNote,
   getDepartmentsList,
   calculateShiftPay,
+  calculateMeals,
 } from '../services/dataService';
 import { getAdminEmailSettings } from '../services/emailService';
 import { format } from 'date-fns';
@@ -96,6 +97,17 @@ export default function AdminDashboard() {
       return sum + calculateShiftPay(c.shiftName, rate, c.otHours);
     }, 0);
 
+  const totalMealStats = useMemo(() => {
+    let lunch = 0;
+    let dinner = 0;
+    checkins.forEach(c => {
+      const m = calculateMeals(c.shiftName);
+      lunch += m.lunch;
+      dinner += m.dinner;
+    });
+    return { lunch, dinner, total: lunch + dinner };
+  }, [checkins]);
+
   const handleApproveSingle = async (checkin: Checkin) => {
     try {
       const res = await approveCheckinItem(checkin.id);
@@ -172,6 +184,14 @@ export default function AdminDashboard() {
       const approvedShifts = userCheckins.length;
       const totalOT = userCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);
       const totalSalary = userCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, user.salaryRate, c.otHours), 0);
+      let lunchMeals = 0;
+      let dinnerMeals = 0;
+      userCheckins.forEach(c => {
+        const m = calculateMeals(c.shiftName);
+        lunchMeals += m.lunch;
+        dinnerMeals += m.dinner;
+      });
+
       return {
         'Họ và Tên': user.fullName,
         'Số điện thoại': `"${user.phone}"`,
@@ -179,6 +199,9 @@ export default function AdminDashboard() {
         'Mức phụ cấp/ca (VND)': user.salaryRate || 50000,
         'Số ca đã duyệt': approvedShifts,
         'Tổng giờ OT làm thêm': totalOT,
+        'Suất ăn trưa': lunchMeals,
+        'Suất ăn tối': dinnerMeals,
+        'Tổng suất ăn': lunchMeals + dinnerMeals,
         'Tổng phụ cấp nhận (VND)': totalSalary,
       };
     });
@@ -283,8 +306,8 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Metric Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        {/* Metric Cards & Meals Stat Card */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tổng TNV Đăng ký</span>
             <div className="text-3xl font-black text-gray-900 mt-2">{users.length} <span className="text-sm font-normal text-gray-500">người</span></div>
@@ -303,6 +326,15 @@ export default function AdminDashboard() {
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">Tổng chi phí phụ cấp</span>
             <div className="text-3xl font-black text-blue-600 mt-2">{totalPayroll.toLocaleString()} <span className="text-xs font-normal text-gray-500">VND</span></div>
+          </div>
+
+          <div className="bg-white p-5 rounded-2xl border border-orange-200 bg-orange-50/20 shadow-sm">
+            <span className="text-xs font-bold text-orange-600 uppercase tracking-wider block">🍱 Suất Ăn Cần Chuẩn Bị</span>
+            <div className="text-3xl font-black text-orange-600 mt-1">{totalMealStats.total} <span className="text-xs font-normal text-gray-500">suất</span></div>
+            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 font-bold border-t border-orange-100 pt-1">
+              <span className="text-amber-800">🌞 Trưa: {totalMealStats.lunch}</span>
+              <span className="text-purple-800">🌙 Tối: {totalMealStats.dinner}</span>
+            </div>
           </div>
         </div>
 

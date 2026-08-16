@@ -8,7 +8,7 @@ interface AdminDailyQRModalProps {
 }
 
 export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModalProps) {
-  const [selectedShift, setSelectedShift] = useState('Ca Sáng (08:00 - 12:00)');
+  const [selectedShift, setSelectedShift] = useState('Ca Sáng (07:00 - 12:00)');
   const [qrType, setQrType] = useState<'event_checkin' | 'event_checkout'>('event_checkin');
   const currentDate = format(new Date(), 'yyyy-MM-dd');
 
@@ -71,12 +71,12 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
           <select
             value={selectedShift}
             onChange={(e) => setSelectedShift(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+            className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
           >
-            <option value="Ca Sáng (08:00 - 12:00)">Ca Sáng (08:00 - 12:00)</option>
-            <option value="Ca Chiều (13:00 - 17:00)">Ca Chiều (13:00 - 17:00)</option>
-            <option value="Ca Tối (18:00 - 21:00)">Ca Tối (18:00 - 21:00)</option>
-            <option value="Ca Cả Ngày (08:00 - 17:00)">Ca Cả Ngày (08:00 - 17:00)</option>
+            <option value="Ca Sáng (07:00 - 12:00)">Ca Sáng (07:00 - 12:00)</option>
+            <option value="Ca Chiều (13:00 - 17:30)">Ca Chiều (13:00 - 17:30)</option>
+            <option value="Ca Tối / OT (18:00 - 22:00)">Ca Tối / OT (18:00 - 22:00)</option>
+            <option value="Ca Cả Ngày (07:00 - 17:30)">Ca Cả Ngày (07:00 - 17:30)</option>
           </select>
         </div>
 
