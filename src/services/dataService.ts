@@ -250,6 +250,7 @@ export async function registerTNV(payload: {
         id: newUser.id,
         role: newUser.role,
         full_name: newUser.fullName,
+        email: newUser.email,
         phone: newUser.phone,
         facebook_link: newUser.facebookLink,
         department: newUser.department,
@@ -328,6 +329,7 @@ export async function fetchAllUsers(): Promise<User[]> {
               id: u.id,
               role: u.role,
               full_name: u.fullName,
+              email: u.email,
               phone: u.phone,
               facebook_link: u.facebookLink || '',
               department: u.department,
@@ -464,6 +466,7 @@ export async function submitScheduleRegistration(
         id: user.id,
         role: user.role,
         full_name: user.fullName,
+        email: user.email,
         phone: user.phone,
         facebook_link: user.facebookLink || '',
         department: user.department,
@@ -589,6 +592,7 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     try {
       const updatePayload: any = { updated_at: Date.now() };
       if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
+      if (data.email !== undefined) updatePayload.email = data.email;
       if (data.phone !== undefined) updatePayload.phone = data.phone;
       if (data.facebookLink !== undefined) updatePayload.facebook_link = data.facebookLink;
       if (data.department !== undefined) updatePayload.department = data.department;

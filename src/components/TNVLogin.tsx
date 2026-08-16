@@ -13,7 +13,11 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
 
   useEffect(() => {
     setIsLogin(initialIsLogin);
-    setDepartments(getDepartmentsList());
+    const deps = getDepartmentsList();
+    setDepartments(deps);
+    if (deps.length > 0 && (!department || !deps.includes(department))) {
+      setDepartment(deps[0]);
+    }
   }, [initialIsLogin]);
 
   // Form State
