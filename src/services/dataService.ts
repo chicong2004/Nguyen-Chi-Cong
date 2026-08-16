@@ -289,90 +289,68 @@ export async function loginAdmin(passcode: string): Promise<User> {
 }
 
 export async function fetchAllUsers(): Promise<User[]> {
-  let localUsers = getLocalUsers();
-
-  // 1. Try pulling from Global Cloud Relay for instant cross-device sync!
-  const cloudData = await pullGlobalCloudData();
-  if (cloudData && Array.isArray(cloudData.users)) {
-    const map = new Map<string, User>();
-    localUsers.forEach(u => map.set(u.id, u));
-    cloudData.users.forEach((u: any) => map.set(u.id, u));
-    localUsers = Array.from(map.values());
-    saveLocalUsers(localUsers);
-  }
-
-  // 2. Try Supabase
+  // If Supabase is active, Supabase Cloud is the single source of truth!
   if (isSupabaseActive()) {
     try {
-      const { data } = await supabase.from('users').select('*');
-      if (data && data.length > 0) {
-        const cloudUsers: User[] = data.map(d => ({
-          id: d.id,
-          role: d.role,
-          fullName: d.full_name,
-          email: d.email || `${d.full_name.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-          phone: d.phone,
-          facebookLink: d.facebook_link,
-          department: d.department,
-          salaryRate: d.salary_rate || 50000,
-          createdAt: d.created_at,
-          updatedAt: d.updated_at,
-        }));
-        
-        const map = new Map<string, User>();
-        localUsers.forEach(u => map.set(u.id, u));
-        cloudUsers.forEach(u => map.set(u.id, u));
-        localUsers = Array.from(map.values());
-        saveLocalUsers(localUsers);
-      } else if (localUsers.length > 0) {
-        // Automatically sync local users to Supabase if Supabase is empty
-        const payload = localUsers.map(u => ({
-          id: u.id,
-          role: u.role,
-          full_name: u.fullName,
-          phone: u.phone,
-          facebook_link: u.facebookLink || '',
-          department: u.department,
-          salary_rate: u.salaryRate || 50000,
-          created_at: u.createdAt,
-          updated_at: u.updatedAt,
-        }));
-        await supabase.from('users').upsert(payload);
+      const { data, error } = await supabase.from('users').select('*');
+      if (!error && data) {
+        if (data.length > 0) {
+          const cloudUsers: User[] = data.map(d => ({
+            id: d.id,
+            role: d.role,
+            fullName: d.full_name,
+            email: d.email || `${d.full_name.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+            phone: d.phone,
+            facebookLink: d.facebook_link || '',
+            department: d.department,
+            salaryRate: Number(d.salary_rate) || 50000,
+            createdAt: Number(d.created_at),
+            updatedAt: Number(d.updated_at),
+          }));
+          saveLocalUsers(cloudUsers);
+          return cloudUsers;
+        } else {
+          // If Supabase is empty, migrate local users once
+          const localUsers = getLocalUsers();
+          if (localUsers.length > 0) {
+            const payload = localUsers.map(u => ({
+              id: u.id,
+              role: u.role,
+              full_name: u.fullName,
+              phone: u.phone,
+              facebook_link: u.facebookLink || '',
+              department: u.department,
+              salary_rate: u.salaryRate || 50000,
+              created_at: u.createdAt,
+              updated_at: u.updatedAt,
+            }));
+            await supabase.from('users').upsert(payload);
+          }
+          return localUsers;
+        }
       }
     } catch (err) {
       console.warn("Supabase fetch users notice:", err);
     }
   }
 
-  return localUsers;
+  // Fallback to local storage if Supabase is not active
+  return getLocalUsers();
 }
 
 export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
-  let localCheckins = getLocalCheckins();
   const users = await fetchAllUsers();
   const validUserIds = new Set(users.map(u => u.id));
-  let cleanCheckins = localCheckins.filter(c => validUserIds.has(c.userId));
 
-  // 1. Pull from Global Cloud Relay
-  const cloudData = await pullGlobalCloudData();
-  if (cloudData && Array.isArray(cloudData.checkins)) {
-    const map = new Map<string, Checkin>();
-    cleanCheckins.forEach(c => map.set(c.id, c));
-    cloudData.checkins.filter((c: any) => validUserIds.has(c.userId)).forEach((c: any) => map.set(c.id, c));
-    cleanCheckins = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
-    saveLocalCheckins(cleanCheckins);
-  }
-
-  // 2. Pull from Supabase
   if (isSupabaseActive()) {
     try {
-      if (!userId || isValidUUID(userId)) {
-        let query = supabase.from('checkins').select('*').order('created_at', { ascending: false });
-        if (userId) {
-          query = query.eq('user_id', userId);
-        }
-        const { data } = await query;
-        if (data && data.length > 0) {
+      let query = supabase.from('checkins').select('*').order('created_at', { ascending: false });
+      if (userId && isValidUUID(userId)) {
+        query = query.eq('user_id', userId);
+      }
+      const { data, error } = await query;
+      if (!error && data) {
+        if (data.length > 0) {
           const cloudCheckins: Checkin[] = data
             .filter(d => validUserIds.has(d.user_id))
             .map(d => ({
@@ -380,34 +358,50 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
               userId: d.user_id,
               fullName: d.full_name,
               department: d.department,
+              workDate: d.work_date || format(new Date(Number(d.created_at)), 'yyyy-MM-dd'),
               shiftName: d.shift_name || 'Ca làm việc',
+              otHours: Number(d.ot_hours) || 0,
               status: d.status,
-              createdAt: d.created_at,
-              updatedAt: d.updated_at,
+              type: 'checkin',
+              adminNote: d.admin_note || d.notes || '',
+              createdAt: Number(d.created_at),
+              updatedAt: Number(d.updated_at),
             }));
 
-          const map = new Map<string, Checkin>();
-          cleanCheckins.forEach(c => map.set(c.id, c));
-          cloudCheckins.forEach(c => map.set(c.id, c));
-          cleanCheckins = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
-          saveLocalCheckins(cleanCheckins);
-        } else if (cleanCheckins.length > 0) {
-          // Automatically sync local checkins to Supabase if Supabase is empty
-          const payload = cleanCheckins
-            .filter(c => isValidUUID(c.id) && isValidUUID(c.userId))
-            .map(c => ({
-              id: c.id,
-              user_id: c.userId,
-              full_name: c.fullName,
-              department: c.department,
-              shift_name: c.shiftName || 'Ca làm việc',
-              status: c.status,
-              created_at: c.createdAt,
-              updated_at: c.updatedAt,
-            }));
-          if (payload.length > 0) {
-            await supabase.from('checkins').upsert(payload);
+          saveLocalCheckins(cloudCheckins);
+          if (userId) {
+            return cloudCheckins.filter(c => c.userId === userId);
           }
+          return cloudCheckins;
+        } else {
+          // If Supabase is empty, migrate local checkins once
+          const localCheckins = getLocalCheckins();
+          const cleanCheckins = localCheckins.filter(c => validUserIds.has(c.userId));
+          if (cleanCheckins.length > 0) {
+            const payload = cleanCheckins
+              .filter(c => isValidUUID(c.id) && isValidUUID(c.userId))
+              .map(c => ({
+                id: c.id,
+                user_id: c.userId,
+                full_name: c.fullName,
+                department: c.department,
+                work_date: c.workDate || format(new Date(), 'yyyy-MM-dd'),
+                shift_name: c.shiftName || 'Ca làm việc',
+                ot_hours: c.otHours || 0,
+                status: c.status,
+                notes: c.adminNote || '',
+                admin_note: c.adminNote || '',
+                created_at: c.createdAt,
+                updated_at: c.updatedAt,
+              }));
+            if (payload.length > 0) {
+              await supabase.from('checkins').upsert(payload);
+            }
+          }
+          if (userId) {
+            return cleanCheckins.filter(c => c.userId === userId);
+          }
+          return cleanCheckins;
         }
       }
     } catch (err) {
@@ -415,10 +409,11 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
     }
   }
 
+  const localCheckins = getLocalCheckins().filter(c => validUserIds.has(c.userId));
   if (userId) {
-    return cleanCheckins.filter(c => c.userId === userId).sort((a, b) => b.createdAt - a.createdAt);
+    return localCheckins.filter(c => c.userId === userId);
   }
-  return cleanCheckins.sort((a, b) => b.createdAt - a.createdAt);
+  return localCheckins;
 }
 
 // TNV registers schedule for a specific date, shift, and OT hours
@@ -453,12 +448,31 @@ export async function submitScheduleRegistration(
 
   if (isSupabaseActive() && isValidUUID(user.id)) {
     try {
+      // First ensure user exists in Supabase users table to satisfy foreign key constraint
+      await supabase.from('users').upsert({
+        id: user.id,
+        role: user.role,
+        full_name: user.fullName,
+        phone: user.phone,
+        facebook_link: user.facebookLink || '',
+        department: user.department,
+        salary_rate: user.salaryRate || 50000,
+        created_at: user.createdAt,
+        updated_at: user.updatedAt,
+      });
+
+      // Insert full checkin payload
       await supabase.from('checkins').insert({
         id: newSchedule.id,
         user_id: user.id,
         full_name: user.fullName,
         department: user.department,
+        work_date: workDate,
+        shift_name: shiftName,
+        ot_hours: otHours,
         status: 'pending',
+        notes: notes || '',
+        admin_note: notes || '',
         created_at: newSchedule.createdAt,
         updated_at: newSchedule.updatedAt,
       });
