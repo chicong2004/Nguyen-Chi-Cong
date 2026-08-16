@@ -32,10 +32,10 @@ function AppContent() {
     <div className="min-h-screen bg-gradient-to-b from-blue-50/60 via-white to-gray-50 flex flex-col justify-between p-4 sm:p-6">
       <header className="max-w-xl mx-auto w-full flex items-center justify-between py-2">
         <div className="flex items-center gap-2">
-          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md font-bold">
-            TNV
+          <div className="w-9 h-9 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-md font-extrabold text-xs tracking-tighter">
+            PM
           </div>
-          <span className="font-black text-gray-900 text-lg tracking-tight">Xanthic Mix App</span>
+          <span className="font-black text-gray-900 text-lg tracking-tight">Personnel Management</span>
         </div>
 
         {isLocalStorageMode ? (
@@ -52,10 +52,10 @@ function AppContent() {
       <main className="max-w-md mx-auto w-full my-6 space-y-6">
         <div className="text-center">
           <h1 className="text-2xl sm:text-3xl font-black text-gray-900 tracking-tight mb-2">
-            Hệ Thống Đăng Ký & Quản Lý TNV
+            Personnel Management System
           </h1>
           <p className="text-xs sm:text-sm text-gray-500 max-w-sm mx-auto">
-            Đăng ký bộ phận, lịch làm việc, nhận email thông báo duyệt lịch tự động từ Admin.
+            Hệ thống đăng ký bộ phận, quản lý lịch ca làm việc & phụ cấp nhân sự tự động.
           </p>
         </div>
 
