@@ -498,6 +498,8 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
               status: d.status,
               type: 'checkin',
               adminNote: d.admin_note || d.notes || '',
+              checkinTime: d.checkin_time ? Number(d.checkin_time) : undefined,
+              checkoutTime: d.checkout_time ? Number(d.checkout_time) : undefined,
               createdAt: Number(d.created_at),
               updatedAt: Number(d.updated_at),
             }));
@@ -633,6 +635,25 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         existingPending.type = 'full';
         existingPending.status = 'approved';
         existingPending.updatedAt = Date.now();
+
+        // Update local storage
+        const allCheckins = getLocalCheckins();
+        const idx = allCheckins.findIndex(c => c.id === existingPending.id);
+        if (idx !== -1) {
+          allCheckins[idx] = existingPending;
+          saveLocalCheckins(allCheckins);
+        }
+
+        // Update Supabase
+        if (isSupabaseActive() && isValidUUID(existingPending.id)) {
+          await supabase.from('checkins').update({
+            status: 'approved',
+            checkin_time: existingPending.checkinTime || null,
+            checkout_time: existingPending.checkoutTime,
+            updated_at: Date.now(),
+          }).eq('id', existingPending.id);
+        }
+
         await approveCheckinItem(existingPending.id);
 
         return {
@@ -646,6 +667,25 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         checkin.checkoutTime = Date.now();
         checkin.type = 'full';
         checkin.status = 'approved';
+
+        // Update local storage
+        const allCheckins = getLocalCheckins();
+        const idx = allCheckins.findIndex(c => c.id === checkin.id);
+        if (idx !== -1) {
+          allCheckins[idx] = checkin;
+          saveLocalCheckins(allCheckins);
+        }
+
+        // Update Supabase
+        if (isSupabaseActive() && isValidUUID(checkin.id)) {
+          await supabase.from('checkins').update({
+            status: 'approved',
+            checkin_time: checkin.checkinTime,
+            checkout_time: checkin.checkoutTime,
+            updated_at: Date.now(),
+          }).eq('id', checkin.id);
+        }
+
         await approveCheckinItem(checkin.id);
         return {
           success: true,
@@ -656,6 +696,25 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     } else {
       const checkin = await submitScheduleRegistration(activeUser, workDate, shiftName, 0);
       checkin.checkinTime = Date.now();
+      checkin.status = 'approved';
+
+      // Update local storage
+      const allCheckins = getLocalCheckins();
+      const idx = allCheckins.findIndex(c => c.id === checkin.id);
+      if (idx !== -1) {
+        allCheckins[idx] = checkin;
+        saveLocalCheckins(allCheckins);
+      }
+
+      // Update Supabase
+      if (isSupabaseActive() && isValidUUID(checkin.id)) {
+        await supabase.from('checkins').update({
+          status: 'approved',
+          checkin_time: checkin.checkinTime,
+          updated_at: Date.now(),
+        }).eq('id', checkin.id);
+      }
+
       await approveCheckinItem(checkin.id);
       return {
         success: true,
@@ -767,7 +826,10 @@ export async function approveCheckinItem(checkinId: string): Promise<{ success: 
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
-      await supabase.from('checkins').update({ status: 'approved', updated_at: Date.now() }).eq('id', checkinId);
+      const updatePayload: any = { status: 'approved', updated_at: Date.now() };
+      if (target?.checkinTime) updatePayload.checkin_time = target.checkinTime;
+      if (target?.checkoutTime) updatePayload.checkout_time = target.checkoutTime;
+      await supabase.from('checkins').update(updatePayload).eq('id', checkinId);
     } catch (e) {
       console.warn("Supabase approve notice:", e);
     }
