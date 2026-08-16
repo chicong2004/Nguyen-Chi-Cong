@@ -491,6 +491,9 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
   if (!isValidUUID(checkin.id)) {
     checkin.id = generateUUID();
   }
+  if (!isValidUUID(checkin.userId)) {
+    checkin.userId = generateUUID();
+  }
   try {
     const rawCreatedAt = checkin.createdAt || Date.now();
     const rawUpdatedAt = checkin.updatedAt || Date.now();
@@ -852,6 +855,12 @@ export async function submitScheduleRegistration(
   eventId?: string,
   eventName?: string
 ): Promise<Checkin> {
+  // Ensure user profile has a valid UUID and is persisted in Supabase
+  if (!isValidUUID(user.id)) {
+    user.id = generateUUID();
+    setLocalSession(user);
+  }
+
   const chosenDepartment = targetDepartment || user.department;
   const deptRate = getDepartmentRate(chosenDepartment);
 
