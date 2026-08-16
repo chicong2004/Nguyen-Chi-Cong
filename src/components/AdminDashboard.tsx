@@ -12,6 +12,8 @@ import {
   getDepartmentsList,
   calculateShiftPay,
   calculateMeals,
+  rejectCheckinItem,
+  deleteCheckinItem,
 } from '../services/dataService';
 import { getAdminEmailSettings } from '../services/emailService';
 import { format } from 'date-fns';
@@ -117,6 +119,32 @@ export default function AdminDashboard() {
     } catch (err) {
       console.error(err);
       alert("Lỗi khi duyệt ca.");
+    }
+  };
+
+  const handleRejectSingle = async (checkin: Checkin) => {
+    try {
+      await rejectCheckinItem(checkin.id);
+      setToastMessage(`❌ Đã từ chối ca làm việc "${checkin.shiftName}" của ${checkin.fullName}!`);
+      setTimeout(() => setToastMessage(''), 5000);
+      await loadAllData();
+    } catch (err) {
+      console.error(err);
+      alert("Lỗi khi từ chối ca.");
+    }
+  };
+
+  const handleDeleteSingleCheckin = async (checkin: Checkin) => {
+    if (confirm(`Bạn có chắc chắn muốn XÓA ca làm (${checkin.workDate} - ${checkin.shiftName}) của ${checkin.fullName}?`)) {
+      try {
+        await deleteCheckinItem(checkin.id);
+        setToastMessage(`🗑️ Đã xóa thành công ca làm việc của ${checkin.fullName}!`);
+        setTimeout(() => setToastMessage(''), 5000);
+        await loadAllData();
+      } catch (err) {
+        console.error(err);
+        alert("Lỗi khi xóa ca.");
+      }
     }
   };
 
@@ -529,19 +557,59 @@ export default function AdminDashboard() {
                                     />
                                   </div>
 
-                                  <div className="flex items-center justify-between pt-1">
-                                    {ci.status === 'pending' ? (
-                                      <button
-                                        onClick={() => handleApproveSingle(ci)}
-                                        className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded text-[10px] transition"
-                                      >
-                                        Duyệt Lịch & Gửi Mail
-                                      </button>
-                                    ) : (
-                                      <span className="text-emerald-600 font-bold text-[10px] flex items-center gap-1">
-                                        ✓ Đã duyệt 📧 Email (from {adminSettings.senderEmail})
-                                      </span>
-                                    )}
+                                  <div className="flex items-center justify-between pt-1 border-t border-gray-200/60 mt-1">
+                                    <div className="flex items-center gap-1">
+                                      {ci.status === 'pending' && (
+                                        <>
+                                          <button
+                                            onClick={() => handleApproveSingle(ci)}
+                                            className="px-2 py-0.5 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded text-[10px] transition"
+                                          >
+                                            ✓ Duyệt & Mail
+                                          </button>
+                                          <button
+                                            onClick={() => handleRejectSingle(ci)}
+                                            className="px-2 py-0.5 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded text-[10px] transition"
+                                          >
+                                            ✕ Từ Chối
+                                          </button>
+                                        </>
+                                      )}
+                                      {ci.status === 'approved' && (
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-emerald-600 font-bold text-[10px] flex items-center gap-1">
+                                            ✓ Đã duyệt 📧 Email
+                                          </span>
+                                          <button
+                                            onClick={() => handleRejectSingle(ci)}
+                                            className="px-1.5 py-0.2 bg-gray-100 text-gray-600 hover:bg-gray-200 font-semibold rounded text-[9px]"
+                                          >
+                                            Đổi từ chối
+                                          </button>
+                                        </div>
+                                      )}
+                                      {ci.status === 'rejected' && (
+                                        <div className="flex items-center gap-1">
+                                          <span className="text-red-600 font-bold text-[10px]">
+                                            ❌ Đã Từ Chối
+                                          </span>
+                                          <button
+                                            onClick={() => handleApproveSingle(ci)}
+                                            className="px-1.5 py-0.2 bg-blue-50 text-blue-600 hover:bg-blue-100 font-bold rounded text-[9px]"
+                                          >
+                                            Duyệt lại
+                                          </button>
+                                        </div>
+                                      )}
+                                    </div>
+
+                                    <button
+                                      onClick={() => handleDeleteSingleCheckin(ci)}
+                                      className="px-1.5 py-0.5 text-red-500 hover:text-red-700 hover:bg-red-50 rounded font-bold text-[10px] transition flex items-center gap-0.5"
+                                      title="Xóa ca làm này"
+                                    >
+                                      🗑️ Xóa ca
+                                    </button>
                                   </div>
                                 </div>
                               );

@@ -838,6 +838,45 @@ export async function approveCheckinItem(checkinId: string): Promise<{ success: 
   return { success: true, emailNotice };
 }
 
+export async function rejectCheckinItem(checkinId: string): Promise<{ success: boolean }> {
+  const checkins = getLocalCheckins();
+  const target = checkins.find(c => c.id === checkinId);
+  if (target) {
+    target.status = 'rejected';
+    target.updatedAt = Date.now();
+    saveLocalCheckins(checkins);
+    await triggerCloudSync();
+  }
+
+  if (isSupabaseActive() && isValidUUID(checkinId)) {
+    try {
+      await supabase.from('checkins').update({ status: 'rejected', updated_at: Date.now() }).eq('id', checkinId);
+    } catch (e) {
+      console.warn("Supabase reject notice:", e);
+    }
+  }
+
+  return { success: true };
+}
+
+export async function deleteCheckinItem(checkinId: string): Promise<{ success: boolean }> {
+  let checkins = getLocalCheckins();
+  checkins = checkins.filter(c => c.id !== checkinId);
+  saveLocalCheckins(checkins);
+
+  await triggerCloudSync();
+
+  if (isSupabaseActive() && isValidUUID(checkinId)) {
+    try {
+      await supabase.from('checkins').delete().eq('id', checkinId);
+    } catch (e) {
+      console.warn("Supabase delete checkin notice:", e);
+    }
+  }
+
+  return { success: true };
+}
+
 export async function bulkApproveCheckinsList(checkinIds: string[]): Promise<void> {
   for (const id of checkinIds) {
     await approveCheckinItem(id);

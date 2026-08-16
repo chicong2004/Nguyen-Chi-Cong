@@ -298,6 +298,10 @@ export default function TNVDashboard() {
                       <span className="px-3 py-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full">
                         ⏳ Chờ duyệt
                       </span>
+                    ) : ci.status === 'rejected' ? (
+                      <span className="px-3 py-1 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-full">
+                        ❌ Từ chối
+                      </span>
                     ) : (
                       <div className="text-right">
                         <span className="px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full block">
