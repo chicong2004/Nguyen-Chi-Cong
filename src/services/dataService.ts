@@ -104,6 +104,30 @@ export function isSupabaseActive(): boolean {
   return isSupabaseConfigured();
 }
 
+export function subscribeToRealtimeChanges(onUpdate: () => void): () => void {
+  if (!isSupabaseActive()) return () => {};
+
+  try {
+    const channel = supabase
+      .channel('schema-db-changes-' + Math.random().toString(36).substring(2, 7))
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
+        onUpdate();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'checkins' }, () => {
+        onUpdate();
+      })
+      .subscribe();
+
+    return () => {
+      try {
+        supabase.removeChannel(channel);
+      } catch {}
+    };
+  } catch {
+    return () => {};
+  }
+}
+
 export const DEFAULT_EVENTS: EventItem[] = [
   {
     id: 'evt-default-1',

@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate, getActiveEventsList, fetchActiveEventsListAsync } from '../services/dataService';
+import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate, getActiveEventsList, fetchActiveEventsListAsync, subscribeToRealtimeChanges } from '../services/dataService';
 import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
 import QRScannerModal from './QRScannerModal';
@@ -19,21 +19,21 @@ export default function TNVDashboard() {
   const [eventsList, setEventsList] = useState<EventItem[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState(userProfile?.department || 'Hậu cần');
   const [selectedEventId, setSelectedEventId] = useState<string>('');
-  const [selectedDate, setSelectedDate] = useState(format(new Date(), 'yyyy-MM-dd'));
-  const [selectedShift, setSelectedShift] = useState('Ca Sáng (07:00 - 12:00)');
+  const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+  const [selectedShift, setSelectedShift] = useState<string>('Ca Sáng (07:00 - 12:00)');
   const [otHours, setOtHours] = useState<number>(0);
-  const [notes, setNotes] = useState('');
+  const [notes, setNotes] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState('');
 
   // Scanner modal
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
   const loadUserData = async () => {
-    if (!userProfile?.id) return;
+    if (!activeProfile?.id) return;
     try {
       // 1. Fetch updated users to sync latest profile, departments & events configured by Admin
       const allUsers = await fetchAllUsers();
-      const updatedProfile = allUsers.find(u => u.id === userProfile.id);
+      const updatedProfile = allUsers.find(u => u.id === activeProfile.id);
       if (updatedProfile) {
         setCurrentUserProfile(updatedProfile);
       }
@@ -50,7 +50,7 @@ export default function TNVDashboard() {
       });
 
       // 3. Fetch latest checkins/schedules
-      const data = await fetchCheckins(userProfile.id);
+      const data = await fetchCheckins(activeProfile.id);
       setCheckins(data);
     } catch (e) {
       console.error("Lỗi lấy dữ liệu lịch làm:", e);
@@ -73,12 +73,21 @@ export default function TNVDashboard() {
     };
     syncEventsAndDeps();
 
-    // Auto refresh every 5 seconds to sync Admin salary updates, events & approval statuses in real-time!
+    const unsubscribe = subscribeToRealtimeChanges(() => {
+      loadUserData();
+      syncEventsAndDeps();
+    });
+
+    // Auto refresh every 3 seconds to sync Admin salary updates, events & approval statuses in real-time!
     const timer = setInterval(() => {
       loadUserData();
       syncEventsAndDeps();
-    }, 5000);
-    return () => clearInterval(timer);
+    }, 3000);
+    
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, [userProfile?.id]);
 
   // Handle native camera scan (URL deep link) or pending scan after login

@@ -14,6 +14,7 @@ import {
   calculateMeals,
   rejectCheckinItem,
   deleteCheckinItem,
+  subscribeToRealtimeChanges,
 } from '../services/dataService';
 import { getAdminEmailSettings } from '../services/emailService';
 import { format } from 'date-fns';
@@ -78,9 +79,18 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadAllData();
 
-    // Auto-refresh every 4 seconds so registration on mobile phone shows immediately on Admin PC!
-    const timer = setInterval(loadAllData, 4000);
-    return () => clearInterval(timer);
+    // Instant WebSocket DB changes listener across all devices
+    const unsubscribe = subscribeToRealtimeChanges(() => {
+      loadAllData();
+    });
+
+    // Auto-poll every 3 seconds for 100% guarantee across mobile cellular networks
+    const timer = setInterval(loadAllData, 3000);
+
+    return () => {
+      unsubscribe();
+      clearInterval(timer);
+    };
   }, []);
 
   const departments = useMemo(() => {
