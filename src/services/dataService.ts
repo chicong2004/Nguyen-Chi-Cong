@@ -205,12 +205,30 @@ function isValidUUID(uuidStr: string): boolean {
   return regex.test(uuidStr);
 }
 
+const GOOGLE_SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwHyPo28ktAc87yPCjtpGA6_DvPpypjom1LCohIr33Z-sDzgR5fzNVeIIBrB3gZn9E1/exec';
+
+export async function syncToGoogleSheets(customUsers?: User[], customCheckins?: Checkin[]): Promise<void> {
+  try {
+    const users = customUsers || getLocalUsers();
+    const checkins = customCheckins || getLocalCheckins();
+    
+    await fetch(GOOGLE_SHEETS_WEBAPP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({ users, checkins }),
+    });
+  } catch (err) {
+    console.warn("Google Sheets sync notice:", err);
+  }
+}
+
 // Trigger Cloud Sync across all devices
 async function triggerCloudSync() {
   const users = getLocalUsers();
   const checkins = getLocalCheckins();
   const departments = getDepartmentsList();
   await pushGlobalCloudData({ users, checkins, departments });
+  await syncToGoogleSheets(users, checkins);
 }
 
 // Service Methods - Universal Cross-Device Cloud Sync
