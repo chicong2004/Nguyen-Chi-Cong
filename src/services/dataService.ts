@@ -104,26 +104,44 @@ export function isSupabaseActive(): boolean {
   return isSupabaseConfigured();
 }
 
-export function subscribeToRealtimeChanges(onUpdate: () => void): () => void {
+export function subscribeToRealtimeChanges(onUpdate: (payload?: any) => void): () => void {
   if (!isSupabaseActive()) return () => {};
 
   try {
+    const channelName = 'realtime-sync-' + Math.random().toString(36).substring(2, 8);
     const channel = supabase
-      .channel('schema-db-changes-' + Math.random().toString(36).substring(2, 7))
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'users' }, () => {
-        onUpdate();
-      })
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'checkins' }, () => {
-        onUpdate();
-      })
-      .subscribe();
+      .channel(channelName)
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'users' },
+        (payload) => {
+          console.log("⚡ [Realtime WebSocket] Users table changed:", payload);
+          onUpdate(payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'checkins' },
+        (payload) => {
+          console.log("⚡ [Realtime WebSocket] Checkins table changed:", payload);
+          onUpdate(payload);
+        }
+      )
+      .subscribe((status, err) => {
+        if (status === 'SUBSCRIBED') {
+          console.log("✅ Supabase Realtime WebSockets CONNECTED & SUBSCRIBED!");
+        } else {
+          console.warn(`Supabase Realtime WebSocket status: ${status}`, err || '');
+        }
+      });
 
     return () => {
       try {
         supabase.removeChannel(channel);
       } catch {}
     };
-  } catch {
+  } catch (err) {
+    console.warn("Realtime subscription setup notice:", err);
     return () => {};
   }
 }
