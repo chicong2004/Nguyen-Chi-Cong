@@ -324,13 +324,12 @@ function getLocalUsers(): User[] {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
     if (!raw) {
-      if (isSupabaseActive()) return [];
       localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(INITIAL_MOCK_USERS));
       return INITIAL_MOCK_USERS;
     }
     return JSON.parse(raw);
   } catch (e) {
-    return [];
+    return INITIAL_MOCK_USERS;
   }
 }
 
@@ -342,14 +341,13 @@ function getLocalCheckins(): Checkin[] {
   try {
     const raw = localStorage.getItem(LOCAL_CHECKINS_KEY);
     if (!raw) {
-      if (isSupabaseActive()) return [];
       localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(INITIAL_MOCK_CHECKINS));
       return INITIAL_MOCK_CHECKINS;
     }
     const checkins: Checkin[] = JSON.parse(raw);
     return checkins;
   } catch (e) {
-    return [];
+    return INITIAL_MOCK_CHECKINS;
   }
 }
 
