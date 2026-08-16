@@ -662,6 +662,7 @@ export async function loginAdmin(passcode: string): Promise<User> {
   };
 
   setLocalSession(adminUser);
+  await safeSupabaseUpsertUser(adminUser);
   return adminUser;
 }
 
