@@ -8,6 +8,8 @@ import QRScannerModal from './QRScannerModal';
 export default function TNVDashboard() {
   const { userProfile, logout } = useAuth();
   const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(userProfile);
+  const activeProfile = currentUserProfile || userProfile;
+
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -111,8 +113,6 @@ export default function TNVDashboard() {
 
     handleUrlOrPendingScan();
   }, [activeProfile?.id]);
-
-  const activeProfile = currentUserProfile || userProfile;
 
   useEffect(() => {
     if (activeProfile?.department) {
