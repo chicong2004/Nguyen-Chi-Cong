@@ -380,6 +380,18 @@ function isValidUUID(uuidStr?: string): boolean {
   return cleaned.length >= 8 && /^[0-9a-f]+$/i.test(cleaned);
 }
 
+function safeParseTimestamp(val: any): number {
+  if (!val) return Date.now();
+  if (typeof val === 'number' && !isNaN(val)) return val;
+  if (typeof val === 'string') {
+    const num = Number(val);
+    if (!isNaN(num) && num > 1000000000) return num;
+    const parsedDate = Date.parse(val);
+    if (!isNaN(parsedDate)) return parsedDate;
+  }
+  return Date.now();
+}
+
 export async function syncToGoogleSheets(customUsers?: User[], customCheckins?: Checkin[]): Promise<void> {
   try {
     const users = customUsers || getLocalUsers();
@@ -692,8 +704,8 @@ export async function fetchAllUsers(): Promise<User[]> {
             eventId: d.event_id || d.eventId || '',
             eventName: d.event_name || d.eventName || '',
             salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
-            createdAt: Number(d.created_at || d.createdAt) || Date.now(),
-            updatedAt: Number(d.updated_at || d.updatedAt) || Date.now(),
+            createdAt: safeParseTimestamp(d.created_at || d.createdAt),
+            updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
           }));
           
           const localUsers = getLocalUsers();
@@ -722,16 +734,17 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
 
   if (isSupabaseActive()) {
     try {
-      let query = supabase.from('checkins').select('*').order('created_at', { ascending: false });
-      if (userId && isValidUUID(userId)) {
-        query = query.eq('user_id', userId);
-      }
-      const { data, error } = await query;
+      const { data, error } = await supabase.from('checkins').select('*').order('created_at', { ascending: false });
       if (!error && data) {
         if (data.length > 0) {
           const cloudCheckins: Checkin[] = data.map(d => {
             const reconstructedUserId = d.user_id || d.userId || d.id;
             const reconstructedName = d.full_name || d.fullName || 'TNV';
+            const createdAtMs = safeParseTimestamp(d.created_at || d.createdAt);
+            const updatedAtMs = safeParseTimestamp(d.updated_at || d.updatedAt);
+            const checkinTimeMs = d.checkin_time ? safeParseTimestamp(d.checkin_time) : (d.checkinTime ? safeParseTimestamp(d.checkinTime) : undefined);
+            const checkoutTimeMs = d.checkout_time ? safeParseTimestamp(d.checkout_time) : (d.checkoutTime ? safeParseTimestamp(d.checkoutTime) : undefined);
+
             // Auto-reconstruct user profile if missing from users list
             if (reconstructedUserId && !existingUsersMap.has(reconstructedUserId)) {
               const reconstructedUser: User = {
@@ -744,7 +757,7 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
                 eventId: d.event_id || d.eventId || '',
                 eventName: d.event_name || d.eventName || '',
                 salaryRate: getDepartmentRate(d.department || 'Hậu cần'),
-                createdAt: Number(d.created_at || d.createdAt) || Date.now(),
+                createdAt: createdAtMs,
                 updatedAt: Date.now(),
               };
               existingUsersMap.set(reconstructedUserId, reconstructedUser);
@@ -755,21 +768,21 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
 
             return {
               id: d.id,
-              userId: d.user_id || d.userId || d.id,
-              fullName: d.full_name || d.fullName || 'TNV',
+              userId: reconstructedUserId,
+              fullName: reconstructedName,
               department: d.department || 'Hậu cần',
               eventId: d.event_id || d.eventId || undefined,
               eventName: d.event_name || d.eventName || undefined,
-              workDate: d.work_date || d.workDate || (d.created_at ? format(new Date(Number(d.created_at)), 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd')),
+              workDate: d.work_date || d.workDate || format(new Date(createdAtMs), 'yyyy-MM-dd'),
               shiftName: d.shift_name || d.shiftName || 'Ca làm việc',
               otHours: Number(d.ot_hours || d.otHours) || 0,
               status: d.status || 'pending',
               type: 'checkin',
               adminNote: d.admin_note || d.notes || d.adminNote || '',
-              checkinTime: d.checkin_time ? Number(d.checkin_time) : (d.checkinTime ? Number(d.checkinTime) : undefined),
-              checkoutTime: d.checkout_time ? Number(d.checkout_time) : (d.checkoutTime ? Number(d.checkoutTime) : undefined),
-              createdAt: Number(d.created_at || d.createdAt) || Date.now(),
-              updatedAt: Number(d.updated_at || d.updatedAt) || Date.now(),
+              checkinTime: checkinTimeMs,
+              checkoutTime: checkoutTimeMs,
+              createdAt: createdAtMs,
+              updatedAt: updatedAtMs,
             };
           });
 
