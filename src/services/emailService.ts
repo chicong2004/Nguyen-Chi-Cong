@@ -1,4 +1,24 @@
-export const ADMIN_EMAIL_SENDER = 'chicong092004@gmail.com';
+const ADMIN_EMAIL_KEY = 'app_admin_email_settings_v1';
+
+export interface AdminEmailSettings {
+  senderEmail: string;
+  adminName: string;
+}
+
+export function getAdminEmailSettings(): AdminEmailSettings {
+  try {
+    const raw = localStorage.getItem(ADMIN_EMAIL_KEY);
+    if (raw) return JSON.parse(raw);
+  } catch {}
+  return {
+    senderEmail: 'chicong092004@gmail.com',
+    adminName: 'Quản trị viên Hệ thống',
+  };
+}
+
+export function saveAdminEmailSettings(settings: AdminEmailSettings) {
+  localStorage.setItem(ADMIN_EMAIL_KEY, JSON.stringify(settings));
+}
 
 export async function sendApprovalEmailNotification(payload: {
   toEmail: string;
@@ -7,11 +27,11 @@ export async function sendApprovalEmailNotification(payload: {
   workDate?: string;
   salaryRate?: number;
 }): Promise<{ success: boolean; message: string }> {
+  const adminSettings = getAdminEmailSettings();
   const subject = `[THÔNG BÁO] Lịch làm việc "${payload.shiftName}" đã được duyệt`;
-  const body = `Xin chào ${payload.toName},\n\nLịch làm việc của bạn (${payload.shiftName} - Ngày ${payload.workDate || 'Hôm nay'}) đã được Quản trị viên duyệt thành công!\nMức phụ cấp: ${(payload.salaryRate || 50000).toLocaleString()} VND/ca.\n\nThông báo tự động gửi từ: ${ADMIN_EMAIL_SENDER}\nTrân trọng!`;
+  const body = `Xin chào ${payload.toName},\n\nLịch làm việc của bạn (${payload.shiftName} - Ngày ${payload.workDate || 'Hôm nay'}) đã được ${adminSettings.adminName} duyệt thành công!\nMức phụ cấp: ${(payload.salaryRate || 50000).toLocaleString()} VND/ca.\n\nThông báo tự động từ: ${adminSettings.senderEmail}\nTrân trọng!`;
 
   try {
-    // Attempt real email dispatch via FormSubmit / Web API endpoint
     await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(payload.toEmail)}`, {
       method: 'POST',
       headers: {
@@ -20,15 +40,15 @@ export async function sendApprovalEmailNotification(payload: {
       },
       body: JSON.stringify({
         _subject: subject,
-        _replyto: ADMIN_EMAIL_SENDER,
+        _replyto: adminSettings.senderEmail,
         message: body,
-        name: "Admin Quản Lý TNV",
+        name: adminSettings.adminName,
       })
     }).catch(e => console.warn("Email API dispatch notice:", e));
 
     return {
       success: true,
-      message: `📧 Đã tự động gửi email thông báo từ ${ADMIN_EMAIL_SENDER} tới ${payload.toEmail}`
+      message: `📧 Đã tự động gửi email thông báo tới ${payload.toEmail} từ ${adminSettings.senderEmail}`
     };
   } catch (err: any) {
     console.error("Lỗi gửi email:", err);

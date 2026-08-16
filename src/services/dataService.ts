@@ -1,15 +1,14 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from '../supabase';
 import { User, Checkin } from '../types';
 import { format } from 'date-fns';
-import { sendApprovalEmailNotification, ADMIN_EMAIL_SENDER } from './emailService';
+import { sendApprovalEmailNotification, getAdminEmailSettings } from './emailService';
+import { pushGlobalCloudData, pullGlobalCloudData } from './cloudSyncService';
 
 const LOCAL_USERS_KEY = 'app_users_data_v1';
 const LOCAL_CHECKINS_KEY = 'app_checkins_data_v1';
 const LOCAL_SESSION_KEY = 'app_session_user_v1';
 const STORAGE_MODE_KEY = 'app_storage_mode_preference';
 const CUSTOM_DEPARTMENTS_KEY = 'app_custom_departments_v1';
-
-export { ADMIN_EMAIL_SENDER };
 
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -115,8 +114,7 @@ export function getStorageMode(): 'local' | 'cloud' {
     const saved = localStorage.getItem(STORAGE_MODE_KEY);
     if (saved === 'cloud' || saved === 'local') return saved;
   } catch {}
-  // Default to cloud if Supabase is configured, so data syncs across devices!
-  return isSupabaseConfigured() ? 'cloud' : 'local';
+  return 'cloud';
 }
 
 export function setStorageMode(mode: 'local' | 'cloud') {
@@ -191,7 +189,14 @@ function isValidUUID(uuidStr: string): boolean {
   return regex.test(uuidStr);
 }
 
-// Service Methods - Cross-device Cloud Sync
+// Trigger Cloud Sync across all devices
+async function triggerCloudSync() {
+  const users = getLocalUsers();
+  const checkins = getLocalCheckins();
+  await pushGlobalCloudData({ users, checkins });
+}
+
+// Service Methods - Universal Cross-Device Cloud Sync
 export async function registerTNV(payload: {
   fullName: string;
   email: string;
@@ -201,6 +206,12 @@ export async function registerTNV(payload: {
   notes?: string;
   password?: string;
 }): Promise<User> {
+  const users = getLocalUsers();
+  const existing = users.find(u => u.email.toLowerCase() === payload.email.toLowerCase());
+  if (existing) {
+    throw new Error('Email này đã được đăng ký trên hệ thống');
+  }
+
   const newUser: User = {
     id: generateUUID(),
     role: 'tnv',
@@ -215,17 +226,13 @@ export async function registerTNV(payload: {
     updatedAt: Date.now(),
   };
 
-  // 1. Save locally for instant UI response
-  const users = getLocalUsers();
-  const existing = users.find(u => u.email.toLowerCase() === payload.email.toLowerCase());
-  if (existing) {
-    throw new Error('Email này đã được đăng ký trên hệ thống');
-  }
   users.push(newUser);
   saveLocalUsers(users);
   setLocalSession(newUser);
 
-  // 2. Sync to Supabase Cloud so ALL devices (Admin & TNVs) see this registration!
+  // Sync globally to cloud KV & Supabase
+  await triggerCloudSync();
+
   if (isSupabaseActive()) {
     try {
       await supabase.from('users').upsert({
@@ -260,14 +267,16 @@ export async function loginTNV(email: string, password?: string): Promise<User> 
 export async function loginAdmin(passcode: string): Promise<User> {
   const ADMIN_PASSCODE = 'admin123';
   if (passcode !== ADMIN_PASSCODE && passcode !== 'admin') {
-    throw new Error('Mật khẩu Admin không đúng (Mật khẩu mặc định: admin123)');
+    throw new Error('Mật khẩu Admin không đúng');
   }
+
+  const adminSettings = getAdminEmailSettings();
 
   const adminUser: User = {
     id: '00000000-0000-4000-8000-000000000000',
     role: 'admin',
-    fullName: 'Quản trị viên Hệ thống',
-    email: ADMIN_EMAIL_SENDER,
+    fullName: adminSettings.adminName || 'Quản trị viên Hệ thống',
+    email: adminSettings.senderEmail || 'chicong092004@gmail.com',
     phone: '0900000000',
     department: 'Ban Điều Hành',
     salaryRate: 0,
@@ -280,7 +289,19 @@ export async function loginAdmin(passcode: string): Promise<User> {
 }
 
 export async function fetchAllUsers(): Promise<User[]> {
-  const localUsers = getLocalUsers();
+  let localUsers = getLocalUsers();
+
+  // 1. Try pulling from Global Cloud Relay for instant cross-device sync!
+  const cloudData = await pullGlobalCloudData();
+  if (cloudData && Array.isArray(cloudData.users)) {
+    const map = new Map<string, User>();
+    localUsers.forEach(u => map.set(u.id, u));
+    cloudData.users.forEach((u: any) => map.set(u.id, u));
+    localUsers = Array.from(map.values());
+    saveLocalUsers(localUsers);
+  }
+
+  // 2. Try Supabase
   if (isSupabaseActive()) {
     try {
       const { data } = await supabase.from('users').select('*');
@@ -301,23 +322,34 @@ export async function fetchAllUsers(): Promise<User[]> {
         const map = new Map<string, User>();
         localUsers.forEach(u => map.set(u.id, u));
         cloudUsers.forEach(u => map.set(u.id, u));
-        const merged = Array.from(map.values());
-        saveLocalUsers(merged);
-        return merged;
+        localUsers = Array.from(map.values());
+        saveLocalUsers(localUsers);
       }
     } catch (err) {
       console.warn("Supabase fetch users notice:", err);
     }
   }
+
   return localUsers;
 }
 
 export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
-  const localCheckins = getLocalCheckins();
+  let localCheckins = getLocalCheckins();
   const users = await fetchAllUsers();
   const validUserIds = new Set(users.map(u => u.id));
   let cleanCheckins = localCheckins.filter(c => validUserIds.has(c.userId));
 
+  // 1. Pull from Global Cloud Relay
+  const cloudData = await pullGlobalCloudData();
+  if (cloudData && Array.isArray(cloudData.checkins)) {
+    const map = new Map<string, Checkin>();
+    cleanCheckins.forEach(c => map.set(c.id, c));
+    cloudData.checkins.filter((c: any) => validUserIds.has(c.userId)).forEach((c: any) => map.set(c.id, c));
+    cleanCheckins = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+    saveLocalCheckins(cleanCheckins);
+  }
+
+  // 2. Pull from Supabase
   if (isSupabaseActive()) {
     try {
       if (!userId || isValidUUID(userId)) {
@@ -385,6 +417,8 @@ export async function submitScheduleRegistration(
   const checkins = getLocalCheckins();
   checkins.unshift(newSchedule);
   saveLocalCheckins(checkins);
+
+  await triggerCloudSync();
 
   if (isSupabaseActive() && isValidUUID(user.id)) {
     try {
@@ -493,6 +527,8 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     saveLocalCheckins(checkins);
   }
 
+  await triggerCloudSync();
+
   if (isSupabaseActive() && isValidUUID(userId)) {
     try {
       const updatePayload: any = { updated_at: Date.now() };
@@ -517,10 +553,10 @@ export async function updateCheckinAdminNote(checkinId: string, adminNote: strin
     target.adminNote = adminNote;
     target.updatedAt = Date.now();
     saveLocalCheckins(checkins);
+    await triggerCloudSync();
   }
 }
 
-// Admin approves schedule / checkin & triggers REAL Email Notification
 export async function approveCheckinItem(checkinId: string): Promise<{ success: boolean; emailNotice: string }> {
   const checkins = getLocalCheckins();
   const target = checkins.find(c => c.id === checkinId);
@@ -535,7 +571,6 @@ export async function approveCheckinItem(checkinId: string): Promise<{ success: 
     const users = getLocalUsers();
     const user = users.find(u => u.id === target.userId);
     
-    // Trigger Real Email Notification to TNV
     if (user && user.email) {
       const emailResult = await sendApprovalEmailNotification({
         toEmail: user.email,
@@ -546,8 +581,11 @@ export async function approveCheckinItem(checkinId: string): Promise<{ success: 
       });
       emailNotice = emailResult.message;
     } else {
-      emailNotice = `📧 Đã duyệt lịch & gửi email thông báo từ ${ADMIN_EMAIL_SENDER}`;
+      const adminSettings = getAdminEmailSettings();
+      emailNotice = `📧 Đã duyệt lịch & gửi email thông báo từ ${adminSettings.senderEmail}`;
     }
+
+    await triggerCloudSync();
   }
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
@@ -579,6 +617,8 @@ export async function removeUser(userId: string): Promise<void> {
   let checkins = getLocalCheckins();
   checkins = checkins.filter(c => c.userId !== userId);
   saveLocalCheckins(checkins);
+
+  await triggerCloudSync();
 
   if (isSupabaseActive() && isValidUUID(userId)) {
     try {

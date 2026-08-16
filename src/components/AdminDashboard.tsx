@@ -10,25 +10,28 @@ import {
   updateUserProfileByAdmin,
   updateCheckinAdminNote,
   getDepartmentsList,
-  ADMIN_EMAIL_SENDER
 } from '../services/dataService';
+import { getAdminEmailSettings } from '../services/emailService';
 import { format } from 'date-fns';
 import Papa from 'papaparse';
 import AdminEditUserModal from './AdminEditUserModal';
 import AdminDailyQRModal from './AdminDailyQRModal';
 import AdminDepartmentModal from './AdminDepartmentModal';
+import AdminSettingsModal from './AdminSettingsModal';
 
 export default function AdminDashboard() {
   const { logout, isLocalStorageMode } = useAuth();
   const [users, setUsers] = useState<User[]>([]);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [departmentsList, setDepartmentsList] = useState<string[]>(getDepartmentsList());
+  const [adminSettings, setAdminSettings] = useState(getAdminEmailSettings());
   const [loading, setLoading] = useState(true);
   
   // Modals
   const [editingUser, setEditingUser] = useState<User | null>(null);
   const [isDailyQROpen, setIsDailyQROpen] = useState(false);
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
+  const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   // Search & Filter
@@ -50,6 +53,7 @@ export default function AdminDashboard() {
       setCheckins(validCheckins);
 
       setDepartmentsList(getDepartmentsList());
+      setAdminSettings(getAdminEmailSettings());
     } catch (err) {
       console.error("Lỗi lấy dữ liệu Admin:", err);
     } finally {
@@ -59,6 +63,10 @@ export default function AdminDashboard() {
 
   useEffect(() => {
     loadAllData();
+
+    // Auto-refresh every 8 seconds so registration on mobile phone shows immediately on Admin PC!
+    const timer = setInterval(loadAllData, 8000);
+    return () => clearInterval(timer);
   }, []);
 
   const departments = useMemo(() => {
@@ -87,7 +95,7 @@ export default function AdminDashboard() {
   const handleApproveSingle = async (checkin: Checkin) => {
     try {
       const res = await approveCheckinItem(checkin.id);
-      setToastMessage(res.emailNotice || `📧 Đã duyệt và gửi email thông báo từ ${ADMIN_EMAIL_SENDER}!`);
+      setToastMessage(res.emailNotice || `📧 Đã duyệt và gửi email thông báo từ ${adminSettings.senderEmail}!`);
       setTimeout(() => setToastMessage(''), 5000);
       await loadAllData();
     } catch (err) {
@@ -101,7 +109,7 @@ export default function AdminDashboard() {
     try {
       await bulkApproveCheckinsList(Array.from(selectedCheckins));
       setSelectedCheckins(new Set());
-      setToastMessage(`📧 Đã duyệt ${selectedCheckins.size} ca & tự động gửi email thông báo từ ${ADMIN_EMAIL_SENDER}!`);
+      setToastMessage(`📧 Đã duyệt ${selectedCheckins.size} ca & tự động gửi email thông báo từ ${adminSettings.senderEmail}!`);
       setTimeout(() => setToastMessage(''), 5000);
       await loadAllData();
     } catch (err) {
@@ -190,6 +198,11 @@ export default function AdminDashboard() {
         onClose={() => setIsDeptModalOpen(false)} 
         onSaved={loadAllData} 
       />
+      <AdminSettingsModal
+        isOpen={isSettingsOpen}
+        onClose={() => setIsSettingsOpen(false)}
+        onSaved={loadAllData}
+      />
       <AdminEditUserModal 
         user={editingUser} 
         isOpen={Boolean(editingUser)} 
@@ -202,15 +215,22 @@ export default function AdminDashboard() {
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
             <div className="flex items-center gap-2">
-              <h1 className="text-2xl font-black tracking-tight text-gray-900">Quản Trị Viên (Admin)</h1>
+              <h1 className="text-2xl font-black tracking-tight text-gray-900">{adminSettings.adminName}</h1>
               <span className="text-[11px] font-semibold bg-blue-100 text-blue-800 px-2.5 py-0.5 rounded-full border border-blue-200">
-                Email gửi thông báo: {ADMIN_EMAIL_SENDER}
+                Email gửi: {adminSettings.senderEmail}
               </span>
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">Quản lý lịch đăng ký, duyệt ca gửi mail tự động & thu thập mã QR Check-in/Check-out</p>
+            <p className="text-xs text-gray-500 mt-0.5">Quản lý lịch đăng ký, duyệt ca gửi mail tự động & thu thập mã QR Check-in/Check-out (Đồng bộ Realtime Mobile & PC)</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setIsSettingsOpen(true)}
+              className="px-3.5 py-2 bg-gray-900 hover:bg-black text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1"
+            >
+              ⚙️ Cấu Hình Admin
+            </button>
+
             <button
               onClick={() => setIsDeptModalOpen(true)}
               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
@@ -298,7 +318,7 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          <div className="w-full md:w-80">
+          <div className="w-full md:w-80 flex items-center gap-2">
             <input
               type="text"
               value={searchTerm}
@@ -306,6 +326,13 @@ export default function AdminDashboard() {
               placeholder="🔍 Tìm theo Tên, SĐT, Email..."
               className="w-full px-4 py-2 border border-gray-200 rounded-xl text-xs outline-none focus:ring-2 focus:ring-gray-900 bg-gray-50"
             />
+            <button 
+              onClick={loadAllData} 
+              title="Làm mới đồng bộ dữ liệu"
+              className="p-2 bg-gray-100 hover:bg-gray-200 rounded-xl text-xs font-bold"
+            >
+              🔄
+            </button>
           </div>
         </div>
 
@@ -313,7 +340,7 @@ export default function AdminDashboard() {
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
           <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
             <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-              📋 Bảng Quản Lý Dữ Liệu Lịch Làm Việc & Điểm Danh
+              📋 Bảng Quản Lý Dữ Liệu Lịch Làm Việc & Điểm Danh (Đồng Bộ Thiết Bị)
               <span className="text-xs font-normal bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-full">
                 {filteredUsers.length} người
               </span>
@@ -340,7 +367,7 @@ export default function AdminDashboard() {
                   <tr>
                     <th className="px-4 py-3">Họ và Tên / Liên hệ</th>
                     <th className="px-4 py-3">Bộ phận (Edit trực tiếp)</th>
-                    <th className="px-4 py-3 text-right">Phụ cấp/ca (VND)</th>
+                    <th className="px-4 py-3 text-right">Phụ cấp/ca (Sửa đồng bộ TNV)</th>
                     <th className="px-4 py-3 text-center">Ca đã duyệt</th>
                     <th className="px-4 py-3 text-right">Tổng phụ cấp (VND)</th>
                     <th className="px-4 py-3">Lịch đăng ký, QR Check-in/out & Note Admin</th>
@@ -449,7 +476,7 @@ export default function AdminDashboard() {
                                       </button>
                                     ) : (
                                       <span className="text-emerald-600 font-bold text-[10px] flex items-center gap-1">
-                                        ✓ Đã duyệt 📧 Email (from {ADMIN_EMAIL_SENDER})
+                                        ✓ Đã duyệt 📧 Email (from {adminSettings.senderEmail})
                                       </span>
                                     )}
                                   </div>

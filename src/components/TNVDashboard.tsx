@@ -1,12 +1,13 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { Checkin } from '../types';
-import { fetchCheckins, submitScheduleRegistration, processQRCheckin } from '../services/dataService';
+import { Checkin, User } from '../types';
+import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin } from '../services/dataService';
 import { format } from 'date-fns';
 import QRScannerModal from './QRScannerModal';
 
 export default function TNVDashboard() {
   const { userProfile, logout } = useAuth();
+  const [currentUserProfile, setCurrentUserProfile] = useState<User | null>(userProfile);
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -21,9 +22,17 @@ export default function TNVDashboard() {
   // Scanner modal
   const [isScannerOpen, setIsScannerOpen] = useState(false);
 
-  const loadUserCheckins = async () => {
+  const loadUserData = async () => {
     if (!userProfile?.id) return;
     try {
+      // 1. Fetch updated users to sync latest salary rate configured by Admin
+      const allUsers = await fetchAllUsers();
+      const updatedProfile = allUsers.find(u => u.id === userProfile.id);
+      if (updatedProfile) {
+        setCurrentUserProfile(updatedProfile);
+      }
+
+      // 2. Fetch latest checkins/schedules
       const data = await fetchCheckins(userProfile.id);
       setCheckins(data);
     } catch (e) {
@@ -34,18 +43,24 @@ export default function TNVDashboard() {
   };
 
   useEffect(() => {
-    loadUserCheckins();
+    loadUserData();
+
+    // Auto refresh every 10 seconds to sync Admin salary updates & approval statuses in real-time!
+    const timer = setInterval(loadUserData, 10000);
+    return () => clearInterval(timer);
   }, [userProfile?.id]);
+
+  const activeProfile = currentUserProfile || userProfile;
 
   const handleScheduleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!userProfile) return;
+    if (!activeProfile) return;
     setIsSubmitting(true);
     setSuccessMessage('');
 
     try {
       await submitScheduleRegistration(
-        userProfile, 
+        activeProfile, 
         selectedDate, 
         selectedShift, 
         Number(otHours), 
@@ -53,7 +68,7 @@ export default function TNVDashboard() {
       );
       setSuccessMessage(`Đã gửi đăng ký lịch làm việc (${selectedDate} - ${selectedShift})! Đang chờ Admin duyệt.`);
       setNotes('');
-      await loadUserCheckins();
+      await loadUserData();
     } catch (err) {
       console.error("Lỗi đăng ký lịch:", err);
       alert("Không thể gửi đăng ký lịch, vui lòng thử lại.");
@@ -63,18 +78,17 @@ export default function TNVDashboard() {
   };
 
   const handleQRScanResult = async (qrText: string) => {
-    if (!userProfile) return;
-    const res = await processQRCheckin(qrText, userProfile);
+    if (!activeProfile) return;
+    const res = await processQRCheckin(qrText, activeProfile);
     setSuccessMessage(res.message);
-    await loadUserCheckins();
+    await loadUserData();
   };
 
-  if (!userProfile) return null;
+  if (!activeProfile) return null;
 
   const approvedShifts = checkins.filter(c => c.status === 'approved').length;
   const pendingShifts = checkins.filter(c => c.status === 'pending').length;
-  const totalOtHours = checkins.filter(c => c.status === 'approved').reduce((sum, c) => sum + (c.otHours || 0), 0);
-  const estimatedEarned = approvedShifts * (userProfile.salaryRate || 50000);
+  const estimatedEarned = approvedShifts * (activeProfile.salaryRate || 50000);
 
   return (
     <div className="max-w-xl mx-auto min-h-screen bg-gray-50 flex flex-col pb-12 text-gray-900">
@@ -90,10 +104,10 @@ export default function TNVDashboard() {
       <div className="bg-white px-6 py-4 shadow-xs border-b border-gray-200 flex justify-between items-center sticky top-0 z-10">
         <div>
           <span className="text-[11px] font-bold px-2.5 py-0.5 rounded-full bg-blue-50 text-blue-700 border border-blue-200">
-            Bộ phận: {userProfile.department}
+            Bộ phận: {activeProfile.department}
           </span>
-          <h1 className="text-xl font-black text-gray-900 mt-1">Xin chào, {userProfile.fullName}</h1>
-          <p className="text-xs text-gray-500">{userProfile.email} • {userProfile.phone}</p>
+          <h1 className="text-xl font-black text-gray-900 mt-1">Xin chào, {activeProfile.fullName}</h1>
+          <p className="text-xs text-gray-500">{activeProfile.email} • {activeProfile.phone}</p>
         </div>
         <button 
           onClick={logout}
@@ -104,12 +118,12 @@ export default function TNVDashboard() {
       </div>
 
       <div className="p-6 space-y-6 flex-1">
-        {/* Basic Stats Cards */}
+        {/* Basic Stats Cards with Live Admin Salary Sync */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs">
             <span className="text-xs text-gray-500 font-medium">Ca đã được duyệt</span>
             <div className="text-2xl font-black text-emerald-600 mt-1">{approvedShifts} <span className="text-xs font-normal text-gray-500">ca</span></div>
-            <span className="text-[11px] text-gray-400">{(userProfile.salaryRate || 50000).toLocaleString()} VND/ca</span>
+            <span className="text-[11px] text-gray-400 font-semibold">{(activeProfile.salaryRate || 50000).toLocaleString()} VND/ca (Đã đồng bộ Admin)</span>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs">
