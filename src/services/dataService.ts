@@ -12,6 +12,7 @@ const CUSTOM_DEPARTMENTS_KEY = 'app_custom_departments_v1';
 const CUSTOM_EVENTS_KEY = 'app_custom_events_v1';
 const SYSTEM_DEPTS_ID = '00000000-0000-4000-8000-000000000099';
 const DEPARTMENT_RATES_KEY = 'app_department_rates_v1';
+const GOOGLE_SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwHyPo28ktAc87yPCjtpGA6_DvPpypjom1LCohIr33Z-sDzgR5fzNVeIIBrB3gZn9E1/exec';
 
 const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
   'Hậu cần': 50000,
@@ -23,6 +24,72 @@ const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
   'Lễ Tân': 70000,
   'Backstage': 80000,
 };
+
+const MOCK_USER_1_ID = '10000000-0000-4000-8000-000000000001';
+const MOCK_USER_2_ID = '10000000-0000-4000-8000-000000000002';
+const MOCK_USER_3_ID = '10000000-0000-4000-8000-000000000003';
+
+const INITIAL_MOCK_USERS: User[] = [
+  {
+    id: MOCK_USER_1_ID,
+    role: 'tnv',
+    fullName: 'Nguyễn Văn An',
+    email: 'nguyenvanan@gmail.com',
+    phone: '0901234567',
+    facebookLink: 'https://facebook.com/nguyenvanan',
+    department: 'Hậu cần',
+    notes: 'Rảnh thứ 7 & Chủ Nhật',
+    salaryRate: 50000,
+    createdAt: Date.now() - 86400000 * 3,
+    updatedAt: Date.now() - 86400000 * 3,
+  },
+  {
+    id: MOCK_USER_2_ID,
+    role: 'tnv',
+    fullName: 'Trần Thị Bình',
+    email: 'tranthibinh@gmail.com',
+    phone: '0987654321',
+    facebookLink: 'https://facebook.com/tranthibinh',
+    department: 'Truyền thông',
+    notes: 'Chuyên chụp ảnh',
+    salaryRate: 60000,
+    createdAt: Date.now() - 86400000 * 2,
+    updatedAt: Date.now() - 86400000 * 2,
+  },
+  {
+    id: MOCK_USER_3_ID,
+    role: 'tnv',
+    fullName: 'Lê Hoàng Cường',
+    email: 'lehoangcuong@gmail.com',
+    phone: '0912345678',
+    facebookLink: '',
+    department: 'Sự kiện',
+    notes: 'Rảnh chiều',
+    salaryRate: 50000,
+    createdAt: Date.now() - 86400000,
+    updatedAt: Date.now() - 86400000,
+  }
+];
+
+const INITIAL_MOCK_CHECKINS: Checkin[] = [
+  {
+    id: '20000000-0000-4000-8000-000000000001',
+    userId: MOCK_USER_1_ID,
+    fullName: 'Nguyễn Văn An',
+    department: 'Hậu cần',
+    workDate: format(new Date(), 'yyyy-MM-dd'),
+    shiftName: 'Ca Sáng (07:00 - 12:00)',
+    status: 'approved',
+    checkinTime: Date.now() - 86400000 * 2,
+    checkoutTime: Date.now() - 86400000 * 2 + 18000000,
+    type: 'full',
+    otHours: 0,
+    adminNote: 'Hoàn thành tốt ca làm',
+    emailNotifySent: true,
+    createdAt: Date.now() - 86400000 * 2,
+    updatedAt: Date.now() - 86400000 * 2,
+  }
+];
 
 export function isSupabaseConfigured(): boolean {
   return Boolean(
@@ -130,73 +197,6 @@ export function generateUUID(): string {
     return v.toString(16);
   });
 }
-
-// Initial Mock Data
-const MOCK_USER_1_ID = '10000000-0000-4000-8000-000000000001';
-const MOCK_USER_2_ID = '10000000-0000-4000-8000-000000000002';
-const MOCK_USER_3_ID = '10000000-0000-4000-8000-000000000003';
-
-const INITIAL_MOCK_USERS: User[] = [
-  {
-    id: MOCK_USER_1_ID,
-    role: 'tnv',
-    fullName: 'Nguyễn Văn An',
-    email: 'nguyenvanan@gmail.com',
-    phone: '0901234567',
-    facebookLink: 'https://facebook.com/nguyenvanan',
-    department: 'Hậu cần',
-    notes: 'Rảnh thứ 7 & Chủ Nhật',
-    salaryRate: 50000,
-    createdAt: Date.now() - 86400000 * 3,
-    updatedAt: Date.now() - 86400000 * 3,
-  },
-  {
-    id: MOCK_USER_2_ID,
-    role: 'tnv',
-    fullName: 'Trần Thị Bình',
-    email: 'tranthibinh@gmail.com',
-    phone: '0987654321',
-    facebookLink: 'https://facebook.com/tranthibinh',
-    department: 'Truyền thông',
-    notes: 'Chuyên chụp ảnh',
-    salaryRate: 60000,
-    createdAt: Date.now() - 86400000 * 2,
-    updatedAt: Date.now() - 86400000 * 2,
-  },
-  {
-    id: MOCK_USER_3_ID,
-    role: 'tnv',
-    fullName: 'Lê Hoàng Cường',
-    email: 'lehoangcuong@gmail.com',
-    phone: '0912345678',
-    facebookLink: '',
-    department: 'Sự kiện',
-    notes: 'Rảnh chiều',
-    salaryRate: 50000,
-    createdAt: Date.now() - 86400000,
-    updatedAt: Date.now() - 86400000,
-  }
-];
-
-const INITIAL_MOCK_CHECKINS: Checkin[] = [
-  {
-    id: '20000000-0000-4000-8000-000000000001',
-    userId: MOCK_USER_1_ID,
-    fullName: 'Nguyễn Văn An',
-    department: 'Hậu cần',
-    workDate: format(new Date(), 'yyyy-MM-dd'),
-    shiftName: 'Ca Sáng (07:00 - 12:00)',
-    status: 'approved',
-    checkinTime: Date.now() - 86400000 * 2,
-    checkoutTime: Date.now() - 86400000 * 2 + 18000000,
-    type: 'full',
-    otHours: 0,
-    adminNote: 'Hoàn thành tốt ca làm',
-    emailNotifySent: true,
-    createdAt: Date.now() - 86400000 * 2,
-    updatedAt: Date.now() - 86400000 * 2,
-  }
-];
 
 export function getDepartmentsList(): string[] {
   const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
@@ -354,8 +354,6 @@ function isValidUUID(uuidStr: string): boolean {
   const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return regex.test(uuidStr);
 }
-
-const GOOGLE_SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwHyPo28ktAc87yPCjtpGA6_DvPpypjom1LCohIr33Z-sDzgR5fzNVeIIBrB3gZn9E1/exec';
 
 export async function syncToGoogleSheets(customUsers?: User[], customCheckins?: Checkin[]): Promise<void> {
   try {

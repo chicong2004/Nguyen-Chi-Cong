@@ -27,8 +27,13 @@ export default class ErrorBoundary extends Component<Props, State> {
     try {
       localStorage.clear();
       sessionStorage.clear();
+      if (typeof window !== 'undefined' && 'caches' in window) {
+        caches.keys().then(names => {
+          for (let name of names) caches.delete(name);
+        });
+      }
     } catch {}
-    window.location.href = window.location.origin + '?v=' + Date.now();
+    window.location.replace(window.location.origin + '?reset=' + Date.now());
   };
 
   public render() {
