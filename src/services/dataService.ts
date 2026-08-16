@@ -324,6 +324,20 @@ export async function fetchAllUsers(): Promise<User[]> {
         cloudUsers.forEach(u => map.set(u.id, u));
         localUsers = Array.from(map.values());
         saveLocalUsers(localUsers);
+      } else if (localUsers.length > 0) {
+        // Automatically sync local users to Supabase if Supabase is empty
+        const payload = localUsers.map(u => ({
+          id: u.id,
+          role: u.role,
+          full_name: u.fullName,
+          phone: u.phone,
+          facebook_link: u.facebookLink || '',
+          department: u.department,
+          salary_rate: u.salaryRate || 50000,
+          created_at: u.createdAt,
+          updated_at: u.updatedAt,
+        }));
+        await supabase.from('users').upsert(payload);
       }
     } catch (err) {
       console.warn("Supabase fetch users notice:", err);
@@ -377,6 +391,23 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
           cloudCheckins.forEach(c => map.set(c.id, c));
           cleanCheckins = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
           saveLocalCheckins(cleanCheckins);
+        } else if (cleanCheckins.length > 0) {
+          // Automatically sync local checkins to Supabase if Supabase is empty
+          const payload = cleanCheckins
+            .filter(c => isValidUUID(c.id) && isValidUUID(c.userId))
+            .map(c => ({
+              id: c.id,
+              user_id: c.userId,
+              full_name: c.fullName,
+              department: c.department,
+              shift_name: c.shiftName || 'Ca làm việc',
+              status: c.status,
+              created_at: c.createdAt,
+              updated_at: c.updatedAt,
+            }));
+          if (payload.length > 0) {
+            await supabase.from('checkins').upsert(payload);
+          }
         }
       }
     } catch (err) {

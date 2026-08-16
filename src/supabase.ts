@@ -1,14 +1,18 @@
 import { createClient } from '@supabase/supabase-js';
 
-let rawUrl = (import.meta.env.VITE_SUPABASE_URL || '').trim();
-let rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || '').trim();
+const DEFAULT_SUPABASE_URL = 'https://jtlhodnusbkqdpxgqhdj.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0bGhvZG51c2JrcWRweGdxaGRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4Njk3NTIsImV4cCI6MjEwMjQ0NTc1Mn0.6olNk7VPXuM7S0fTh6MbIfk-FGKmfZe6Hc-kzLGY-bg';
+
+let rawUrl = (import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
+let rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
 
 // Ensure it starts with https://
 if (rawUrl && !rawUrl.startsWith('http')) {
   rawUrl = `https://${rawUrl}`;
 }
 
-// Remove trailing slashes
+// Remove trailing slashes and /rest/v1 path if present
+rawUrl = rawUrl.replace(/\/rest\/v1\/?$/, '');
 if (rawUrl.endsWith('/')) {
   rawUrl = rawUrl.slice(0, -1);
 }
