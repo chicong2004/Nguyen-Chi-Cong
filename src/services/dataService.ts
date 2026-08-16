@@ -868,8 +868,12 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         };
       }
     } else {
-      // CHECK-IN ACTION
-      let openShift = allUserCheckins.find(c => c.workDate === workDate && !c.checkoutTime) || allUserCheckins.find(c => c.workDate === workDate);
+      // CHECK-IN ACTION: Smart matching for registered shifts across dates
+      let openShift = allUserCheckins.find(c => c.workDate === workDate && !c.checkoutTime) 
+        || allUserCheckins.find(c => c.workDate === workDate)
+        || allUserCheckins.find(c => !c.checkinTime)
+        || allUserCheckins.find(c => !c.checkoutTime)
+        || (allUserCheckins.length > 0 ? allUserCheckins[0] : undefined);
       
       let checkin = openShift;
       if (!checkin) {
