@@ -374,9 +374,10 @@ function setLocalSession(user: User | null) {
   }
 }
 
-function isValidUUID(uuidStr: string): boolean {
-  const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-  return regex.test(uuidStr);
+function isValidUUID(uuidStr?: string): boolean {
+  if (!uuidStr || typeof uuidStr !== 'string') return false;
+  const cleaned = uuidStr.replace(/-/g, '');
+  return cleaned.length >= 8 && /^[0-9a-f]+$/i.test(cleaned);
 }
 
 export async function syncToGoogleSheets(customUsers?: User[], customCheckins?: Checkin[]): Promise<void> {
@@ -414,11 +415,14 @@ async function triggerCloudSync() {
 
 // Service Methods - Universal Cross-Device Cloud Sync
 export async function safeSupabaseUpsertUser(user: User): Promise<void> {
-  if (!isSupabaseActive() || !isValidUUID(user.id)) return;
+  if (!isSupabaseActive()) return;
+  if (!isValidUUID(user.id)) {
+    user.id = generateUUID();
+  }
   try {
     const { error } = await supabase.from('users').upsert({
       id: user.id,
-      role: user.role,
+      role: user.role || 'tnv',
       full_name: user.fullName,
       email: user.email,
       phone: user.phone,
@@ -426,24 +430,24 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
       department: user.department,
       event_id: user.eventId || null,
       event_name: user.eventName || null,
-      salary_rate: user.salaryRate,
-      created_at: user.createdAt,
-      updated_at: user.updatedAt,
+      salary_rate: user.salaryRate || 50000,
+      created_at: user.createdAt || Date.now(),
+      updated_at: user.updatedAt || Date.now(),
     });
 
     if (error) {
       console.warn("Supabase upsert user notice, retrying base payload:", error.message);
       await supabase.from('users').upsert({
         id: user.id,
-        role: user.role,
+        role: user.role || 'tnv',
         full_name: user.fullName,
         email: user.email,
         phone: user.phone,
         facebook_link: user.facebookLink || '',
         department: user.department,
-        salary_rate: user.salaryRate,
-        created_at: user.createdAt,
-        updated_at: user.updatedAt,
+        salary_rate: user.salaryRate || 50000,
+        created_at: user.createdAt || Date.now(),
+        updated_at: user.updatedAt || Date.now(),
       });
     }
   } catch (err) {
@@ -452,7 +456,10 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
 }
 
 export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void> {
-  if (!isSupabaseActive() || !isValidUUID(checkin.id)) return;
+  if (!isSupabaseActive()) return;
+  if (!isValidUUID(checkin.id)) {
+    checkin.id = generateUUID();
+  }
   try {
     const payload: any = {
       id: checkin.id,
@@ -464,13 +471,13 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
       work_date: checkin.workDate || format(new Date(), 'yyyy-MM-dd'),
       shift_name: checkin.shiftName || 'Ca làm việc',
       ot_hours: checkin.otHours || 0,
-      status: checkin.status,
+      status: checkin.status || 'pending',
       notes: checkin.adminNote || '',
       admin_note: checkin.adminNote || '',
       checkin_time: checkin.checkinTime || null,
       checkout_time: checkin.checkoutTime || null,
-      created_at: checkin.createdAt,
-      updated_at: checkin.updatedAt,
+      created_at: checkin.createdAt || Date.now(),
+      updated_at: checkin.updatedAt || Date.now(),
     };
 
     const { error } = await supabase.from('checkins').upsert(payload);
@@ -478,7 +485,10 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
       console.warn("Supabase checkin upsert notice, retrying base payload:", error.message);
       delete payload.event_id;
       delete payload.event_name;
-      await supabase.from('checkins').upsert(payload);
+      const { error: err2 } = await supabase.from('checkins').upsert(payload);
+      if (err2) {
+        console.error("Supabase checkin upsert final error:", err2.message);
+      }
     }
   } catch (err) {
     console.warn("Supabase checkin sync error:", err);
