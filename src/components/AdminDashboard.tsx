@@ -116,16 +116,25 @@ export default function AdminDashboard() {
       return sum + calculateShiftPay(c.shiftName, rate, c.otHours);
     }, 0);
 
+  const [selectedMealDate, setSelectedMealDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
+
   const totalMealStats = useMemo(() => {
     let lunch = 0;
     let dinner = 0;
-    checkins.forEach(c => {
-      const m = calculateMeals(c.shiftName);
+    const targetDate = selectedMealDate || format(new Date(), 'yyyy-MM-dd');
+
+    const dateCheckins = checkins.filter(c => {
+      const cDate = c.workDate || format(c.createdAt, 'yyyy-MM-dd');
+      return cDate === targetDate;
+    });
+
+    dateCheckins.forEach(c => {
+      const m = calculateMeals(c.shiftName || '');
       lunch += m.lunch;
       dinner += m.dinner;
     });
-    return { lunch, dinner, total: lunch + dinner };
-  }, [checkins]);
+    return { lunch, dinner, total: lunch + dinner, targetDate };
+  }, [checkins, selectedMealDate]);
 
   const handleApproveSingle = async (checkin: Checkin) => {
     try {
@@ -393,8 +402,19 @@ export default function AdminDashboard() {
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-orange-200 bg-orange-50/20 shadow-sm">
-            <span className="text-xs font-bold text-orange-600 uppercase tracking-wider block">🍱 Suất Ăn Cần Chuẩn Bị</span>
-            <div className="text-3xl font-black text-orange-600 mt-1">{totalMealStats.total} <span className="text-xs font-normal text-gray-500">suất</span></div>
+            <div className="flex items-center justify-between gap-1 mb-1">
+              <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wider block">🍱 Suất Ăn Theo Ngày</span>
+              <input
+                type="date"
+                value={selectedMealDate}
+                onChange={(e) => setSelectedMealDate(e.target.value)}
+                className="text-[11px] font-bold border border-orange-200 rounded-lg px-1.5 py-0.5 bg-white text-gray-700 outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
+                title="Chọn ngày xem suất ăn (Mặc định: Hôm nay, tự động reset qua ngày mới)"
+              />
+            </div>
+            <div className="text-3xl font-black text-orange-600 mt-1">
+              {totalMealStats.total} <span className="text-xs font-normal text-gray-500">suất</span>
+            </div>
             <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 font-bold border-t border-orange-100 pt-1">
               <span className="text-amber-800">🌞 Trưa: {totalMealStats.lunch}</span>
               <span className="text-purple-800">🌙 Tối: {totalMealStats.dinner}</span>
