@@ -17,15 +17,7 @@ export default defineConfig(() => {
     },
     build: {
       target: 'es2015',
-      chunkSizeWarningLimit: 1600,
-      rollupOptions: {
-        output: {
-          manualChunks: {
-            vendor: ['react', 'react-dom'],
-            supabase: ['@supabase/supabase-js'],
-          },
-        },
-      },
+      chunkSizeWarningLimit: 3000,
     },
   };
 });
