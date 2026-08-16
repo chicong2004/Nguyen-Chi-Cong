@@ -64,8 +64,8 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadAllData();
 
-    // Auto-refresh every 8 seconds so registration on mobile phone shows immediately on Admin PC!
-    const timer = setInterval(loadAllData, 8000);
+    // Auto-refresh every 4 seconds so registration on mobile phone shows immediately on Admin PC!
+    const timer = setInterval(loadAllData, 4000);
     return () => clearInterval(timer);
   }, []);
 

@@ -88,6 +88,8 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
   }
 ];
 
+const SYSTEM_DEPTS_ID = '00000000-0000-4000-8000-000000000099';
+
 export function getDepartmentsList(): string[] {
   const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
   try {
@@ -104,7 +106,18 @@ export function getDepartmentsList(): string[] {
 
 export function saveDepartmentsList(deps: string[]) {
   localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(deps));
-  triggerCloudSync();
+  if (isSupabaseActive()) {
+    supabase.from('users').upsert({
+      id: SYSTEM_DEPTS_ID,
+      role: 'admin',
+      full_name: '__SYSTEM_DEPARTMENTS__',
+      phone: '0000000000',
+      department: JSON.stringify(deps),
+      salary_rate: 0,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    }).then(() => {}).catch(err => console.warn("Supabase depts sync notice:", err));
+  }
 }
 
 export function isSupabaseConfigured(): boolean {
@@ -303,8 +316,22 @@ export async function fetchAllUsers(): Promise<User[]> {
     try {
       const { data, error } = await supabase.from('users').select('*');
       if (!error && data) {
-        if (data.length > 0) {
-          const cloudUsers: User[] = data.map(d => ({
+        // 1. Process system departments config row if present
+        const sysRec = data.find(d => d.id === SYSTEM_DEPTS_ID || d.full_name === '__SYSTEM_DEPARTMENTS__');
+        if (sysRec && sysRec.department) {
+          try {
+            const parsed = JSON.parse(sysRec.department);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+              localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(parsed));
+            }
+          } catch {}
+        }
+
+        // 2. Filter out system config row from volunteer user list
+        const userRecords = data.filter(d => d.id !== SYSTEM_DEPTS_ID && d.full_name !== '__SYSTEM_DEPARTMENTS__');
+
+        if (userRecords.length > 0) {
+          const cloudUsers: User[] = userRecords.map(d => ({
             id: d.id,
             role: d.role,
             fullName: d.full_name,
