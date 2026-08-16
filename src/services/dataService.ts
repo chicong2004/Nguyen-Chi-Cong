@@ -11,6 +11,19 @@ const STORAGE_MODE_KEY = 'app_storage_mode_preference';
 const CUSTOM_DEPARTMENTS_KEY = 'app_custom_departments_v1';
 const CUSTOM_EVENTS_KEY = 'app_custom_events_v1';
 
+export function isSupabaseConfigured(): boolean {
+  return Boolean(
+    supabaseUrl &&
+    supabaseAnonKey &&
+    !supabaseUrl.includes('placeholder') &&
+    !supabaseAnonKey.includes('placeholder')
+  );
+}
+
+export function isSupabaseActive(): boolean {
+  return isSupabaseConfigured();
+}
+
 export const DEFAULT_EVENTS: EventItem[] = [
   {
     id: 'evt-default-1',
@@ -271,15 +284,6 @@ export function saveDepartmentsAndRates(deps: string[], rates?: Record<string, n
   }
 }
 
-export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    supabaseUrl &&
-    supabaseAnonKey &&
-    !supabaseUrl.includes('placeholder') &&
-    !supabaseAnonKey.includes('placeholder')
-  );
-}
-
 export function getStorageMode(): 'local' | 'cloud' {
   try {
     const saved = localStorage.getItem(STORAGE_MODE_KEY);
@@ -290,10 +294,6 @@ export function getStorageMode(): 'local' | 'cloud' {
 
 export function setStorageMode(mode: 'local' | 'cloud') {
   localStorage.setItem(STORAGE_MODE_KEY, mode);
-}
-
-export function isSupabaseActive(): boolean {
-  return isSupabaseConfigured();
 }
 
 // LocalStorage Helper functions
