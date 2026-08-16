@@ -541,11 +541,16 @@ export async function fetchAllUsers(): Promise<User[]> {
             createdAt: Number(d.created_at),
             updatedAt: Number(d.updated_at),
           }));
-          saveLocalUsers(cloudUsers);
-          return cloudUsers;
+          
+          const localUsers = getLocalUsers();
+          const mergedMap = new Map<string, User>();
+          localUsers.forEach(u => mergedMap.set(u.id, u));
+          cloudUsers.forEach(u => mergedMap.set(u.id, u));
+          const finalUsers = Array.from(mergedMap.values());
+          saveLocalUsers(finalUsers);
+          return finalUsers;
         } else {
-          saveLocalUsers([]);
-          return [];
+          return getLocalUsers();
         }
       }
     } catch (err) {
@@ -589,14 +594,35 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
               updatedAt: Number(d.updated_at),
             }));
 
-          saveLocalCheckins(cloudCheckins);
+          const localCheckins = getLocalCheckins();
+          const mergedMap = new Map<string, Checkin>();
+          localCheckins.forEach(c => mergedMap.set(c.id, c));
+          cloudCheckins.forEach(c => {
+            const existing = mergedMap.get(c.id);
+            if (existing) {
+              mergedMap.set(c.id, {
+                ...existing,
+                ...c,
+                checkinTime: c.checkinTime || existing.checkinTime,
+                checkoutTime: c.checkoutTime || existing.checkoutTime,
+              });
+            } else {
+              mergedMap.set(c.id, c);
+            }
+          });
+          const finalCheckins = Array.from(mergedMap.values());
+          saveLocalCheckins(finalCheckins);
+
           if (userId) {
-            return cloudCheckins.filter(c => c.userId === userId);
+            return finalCheckins.filter(c => c.userId === userId);
           }
-          return cloudCheckins;
+          return finalCheckins;
         } else {
-          saveLocalCheckins([]);
-          return [];
+          const localCheckins = getLocalCheckins();
+          if (userId) {
+            return localCheckins.filter(c => c.userId === userId);
+          }
+          return localCheckins;
         }
       }
     } catch (err) {
