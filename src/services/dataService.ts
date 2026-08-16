@@ -483,34 +483,25 @@ export async function registerTNV(payload: {
     }
   }
 
-  // Check local users for existing email registration for this event
+  // Check local users for existing email registration
   const users = getLocalUsers();
-  const existingLocalForEvent = users.find(u => 
-    u.email.trim().toLowerCase() === cleanEmail && 
-    (payload.eventId ? u.eventId === payload.eventId : true)
-  );
+  const existingUser = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
 
-  if (existingLocalForEvent) {
-    const eventNameStr = payload.eventName ? ` sự kiện "${payload.eventName}"` : ' sự kiện này';
-    throw new Error(`⚠️ Email (${cleanEmail}) đã được đăng ký tham gia${eventNameStr} trước đó! Mỗi tài khoản chỉ được đăng ký 1 lần cho mỗi sự kiện.`);
-  }
+  if (existingUser) {
+    // Update existing user profile with chosen event and department
+    existingUser.fullName = payload.fullName || existingUser.fullName;
+    existingUser.phone = payload.phone || existingUser.phone;
+    existingUser.department = payload.department || existingUser.department;
+    existingUser.eventId = payload.eventId || existingUser.eventId;
+    existingUser.eventName = payload.eventName || existingUser.eventName;
+    if (payload.facebookLink) existingUser.facebookLink = payload.facebookLink;
+    existingUser.updatedAt = Date.now();
 
-  // Check Supabase Cloud for existing email registration for this event
-  if (isSupabaseActive()) {
-    try {
-      const { data } = await supabase.from('users').select('id, full_name, event_id').eq('email', cleanEmail);
-      if (data && data.length > 0) {
-        const foundForEvent = data.find(d => d.full_name !== '__SYSTEM_DEPARTMENTS__' && (!payload.eventId || d.event_id === payload.eventId));
-        if (foundForEvent) {
-          const eventNameStr = payload.eventName ? ` sự kiện "${payload.eventName}"` : ' sự kiện này';
-          throw new Error(`⚠️ Email (${cleanEmail}) đã được đăng ký tham gia${eventNameStr} trên hệ thống! Vui lòng Đăng nhập để xem lịch ca làm.`);
-        }
-      }
-    } catch (err: any) {
-      if (err.message && (err.message.includes('đã được đăng ký') || err.message.includes('đã đăng ký'))) {
-        throw err;
-      }
-    }
+    saveLocalUsers(users);
+    setLocalSession(existingUser);
+    await safeSupabaseUpsertUser(existingUser);
+    await triggerCloudSync();
+    return existingUser;
   }
 
   const newUser: User = {
