@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { registerTNV, loginTNV, getDepartmentsList, getDepartmentRate } from '../services/dataService';
+import { registerTNV, loginTNV, getDepartmentsList, getDepartmentRate, fetchAllUsers } from '../services/dataService';
 
 interface TNVLoginProps {
   initialIsLogin?: boolean;
@@ -13,11 +13,23 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
 
   useEffect(() => {
     setIsLogin(initialIsLogin);
-    const deps = getDepartmentsList();
-    setDepartments(deps);
-    if (deps.length > 0 && (!department || !deps.includes(department))) {
-      setDepartment(deps[0]);
-    }
+
+    const syncDepartments = async () => {
+      try {
+        await fetchAllUsers();
+      } catch (err) {
+        console.warn("TNVLogin fetchAllUsers notice:", err);
+      }
+      const deps = getDepartmentsList();
+      setDepartments(deps);
+      if (deps.length > 0) {
+        setDepartment(prev => (deps.includes(prev) ? prev : deps[0]));
+      }
+    };
+
+    syncDepartments();
+    const interval = setInterval(syncDepartments, 3000);
+    return () => clearInterval(interval);
   }, [initialIsLogin]);
 
   // Form State
