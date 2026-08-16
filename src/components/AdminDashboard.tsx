@@ -1,6 +1,7 @@
 import React, { useEffect, useState, useMemo } from 'react';
 import { useAuth } from './AuthContext';
 import { User, Checkin } from '../types';
+import { supabase } from '../supabase';
 import { 
   fetchAllUsers, 
   fetchCheckins, 
@@ -15,6 +16,7 @@ import {
   rejectCheckinItem,
   deleteCheckinItem,
   subscribeToRealtimeChanges,
+  isSupabaseActive,
 } from '../services/dataService';
 import { getAdminEmailSettings } from '../services/emailService';
 import { format } from 'date-fns';
@@ -83,16 +85,46 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadAllData();
 
-    // Instant WebSocket DB changes listener across all devices
-    const unsubscribe = subscribeToRealtimeChanges(() => {
-      loadAllData();
-    });
+    // 1. Direct Supabase Realtime Channel Subscription for INSERT, UPDATE, DELETE on checkins & users
+    let channel: any = null;
+    try {
+      if (isSupabaseActive()) {
+        const channelName = 'admin-realtime-' + Math.random().toString(36).substring(2, 8);
+        channel = supabase
+          .channel(channelName)
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'checkins' },
+            (payload) => {
+              console.log("⚡ [Admin Realtime WebSocket] Checkin event (INSERT/UPDATE/DELETE):", payload);
+              loadAllData();
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'users' },
+            (payload) => {
+              console.log("⚡ [Admin Realtime WebSocket] User event (INSERT/UPDATE/DELETE):", payload);
+              loadAllData();
+            }
+          )
+          .subscribe((status) => {
+            if (status === 'SUBSCRIBED') {
+              console.log("✅ Admin Dashboard Realtime SUBSCRIBED to checkins & users!");
+            }
+          });
+      }
+    } catch (e) {
+      console.warn("Admin realtime setup notice:", e);
+    }
 
-    // Auto-poll every 3 seconds for 100% guarantee across mobile cellular networks
+    // 2. Backup polling every 3 seconds for 100% cross-device guarantee
     const timer = setInterval(loadAllData, 3000);
 
     return () => {
-      unsubscribe();
+      if (channel) {
+        try { supabase.removeChannel(channel); } catch {}
+      }
       clearInterval(timer);
     };
   }, []);
