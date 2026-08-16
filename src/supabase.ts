@@ -1,7 +1,7 @@
 import { createClient } from '@supabase/supabase-js';
 
-const DEFAULT_SUPABASE_URL = 'https://jtlhodnusbkqdpxgqhdj.supabase.co';
-const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp0bGhvZG51c2JrcWRweGdxaGRqIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4Njk3NTIsImV4cCI6MjEwMjQ0NTc1Mn0.6olNk7VPXuM7S0fTh6MbIfk-FGKmfZe6Hc-kzLGY-bg';
+const DEFAULT_SUPABASE_URL = 'https://idxebmlumutqbwrmmebr.supabase.co';
+const DEFAULT_SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImlkeGVibWx1bXV0cWJ3cm1tZWJyIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODY4OTMzMTUsImV4cCI6MjEwMjQ2OTMxNX0.MRXN-Zl9I7Og4W08itXX1E4rnEmEU6-9WdGXbEDFRfk';
 
 let rawUrl = (import.meta.env.VITE_SUPABASE_URL || DEFAULT_SUPABASE_URL).trim();
 let rawKey = (import.meta.env.VITE_SUPABASE_ANON_KEY || DEFAULT_SUPABASE_ANON_KEY).trim();
