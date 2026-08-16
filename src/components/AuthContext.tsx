@@ -2,7 +2,9 @@ import React, { createContext, useContext, useEffect, useState } from 'react';
 import { supabase } from '../supabase';
 import { User } from '../types';
 import { 
-  isSupabaseConfigured, 
+  isSupabaseActive, 
+  getStorageMode,
+  setStorageMode,
   getLocalSession, 
   setLocalSession, 
   fetchAllUsers 
@@ -15,6 +17,7 @@ interface AuthContextType {
   isLocalStorageMode: boolean;
   refreshProfile: () => Promise<void>;
   setCurrentSessionUser: (user: User | null) => void;
+  toggleStorageMode: (mode: 'local' | 'cloud') => void;
   logout: () => Promise<void>;
 }
 
@@ -22,9 +25,10 @@ const AuthContext = createContext<AuthContextType>({
   currentUser: null,
   userProfile: null,
   loading: true,
-  isLocalStorageMode: false,
+  isLocalStorageMode: true,
   refreshProfile: async () => {},
   setCurrentSessionUser: () => {},
+  toggleStorageMode: () => {},
   logout: async () => {},
 });
 
@@ -33,11 +37,12 @@ export const useAuth = () => useContext(AuthContext);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [currentUser, setCurrentUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
-  const isLocalStorageMode = !isSupabaseConfigured();
+  const [currentMode, setCurrentMode] = useState<'local' | 'cloud'>(getStorageMode());
+
+  const isLocalStorageMode = currentMode === 'local';
 
   const loadSession = async () => {
     try {
-      // First check if there is a active local session (e.g. Admin or Local TNV user)
       const local = getLocalSession();
       if (local) {
         setCurrentUser(local);
@@ -45,7 +50,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         return;
       }
 
-      if (isSupabaseConfigured()) {
+      if (isSupabaseActive()) {
         const { data: { session } } = await supabase.auth.getSession();
         if (session?.user) {
           const users = await fetchAllUsers();
@@ -82,7 +87,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   useEffect(() => {
     loadSession();
 
-    if (isSupabaseConfigured()) {
+    if (isSupabaseActive()) {
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         if (!session && !getLocalSession()) {
           setCurrentUser(null);
@@ -90,7 +95,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       });
       return () => subscription.unsubscribe();
     }
-  }, []);
+  }, [currentMode]);
 
   const refreshProfile = async () => {
     await loadSession();
@@ -101,8 +106,13 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     setLocalSession(user);
   };
 
+  const toggleStorageMode = (mode: 'local' | 'cloud') => {
+    setStorageMode(mode);
+    setCurrentMode(mode);
+  };
+
   const logout = async () => {
-    if (isSupabaseConfigured()) {
+    if (isSupabaseActive()) {
       try {
         await supabase.auth.signOut();
       } catch (e) {
@@ -121,6 +131,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       isLocalStorageMode,
       refreshProfile,
       setCurrentSessionUser,
+      toggleStorageMode,
       logout,
     }}>
       {!loading && children}

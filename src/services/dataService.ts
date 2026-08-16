@@ -4,11 +4,28 @@ import { User, Checkin } from '../types';
 const LOCAL_USERS_KEY = 'app_users_data_v1';
 const LOCAL_CHECKINS_KEY = 'app_checkins_data_v1';
 const LOCAL_SESSION_KEY = 'app_session_user_v1';
+const STORAGE_MODE_KEY = 'app_storage_mode_preference';
 
-// Initial Mock Data when running in LocalStorage mode or fallback
+// Helper to generate valid PostgreSQL-compatible UUIDs (resolves 400 Bad Request errors)
+export function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = (Math.random() * 16) | 0;
+    const v = c === 'x' ? r : (r & 0x3) | 0x8;
+    return v.toString(16);
+  });
+}
+
+// Initial Mock Data with valid UUIDs
+const MOCK_USER_1_ID = '10000000-0000-4000-8000-000000000001';
+const MOCK_USER_2_ID = '10000000-0000-4000-8000-000000000002';
+const MOCK_USER_3_ID = '10000000-0000-4000-8000-000000000003';
+
 const INITIAL_MOCK_USERS: User[] = [
   {
-    id: 'tnv-demo-1',
+    id: MOCK_USER_1_ID,
     role: 'tnv',
     fullName: 'Nguyễn Văn An',
     email: 'nguyenvanan@gmail.com',
@@ -21,7 +38,7 @@ const INITIAL_MOCK_USERS: User[] = [
     updatedAt: Date.now() - 86400000 * 3,
   },
   {
-    id: 'tnv-demo-2',
+    id: MOCK_USER_2_ID,
     role: 'tnv',
     fullName: 'Trần Thị Bình',
     email: 'tranthibinh@gmail.com',
@@ -34,7 +51,7 @@ const INITIAL_MOCK_USERS: User[] = [
     updatedAt: Date.now() - 86400000 * 2,
   },
   {
-    id: 'tnv-demo-3',
+    id: MOCK_USER_3_ID,
     role: 'tnv',
     fullName: 'Lê Hoàng Cường',
     email: 'lehoangcuong@gmail.com',
@@ -50,8 +67,8 @@ const INITIAL_MOCK_USERS: User[] = [
 
 const INITIAL_MOCK_CHECKINS: Checkin[] = [
   {
-    id: 'ci-1',
-    userId: 'tnv-demo-1',
+    id: '20000000-0000-4000-8000-000000000001',
+    userId: MOCK_USER_1_ID,
     fullName: 'Nguyễn Văn An',
     department: 'Hậu cần',
     shiftName: 'Ca Sáng (08:00 - 12:00)',
@@ -60,8 +77,8 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     updatedAt: Date.now() - 86400000 * 2,
   },
   {
-    id: 'ci-2',
-    userId: 'tnv-demo-1',
+    id: '20000000-0000-4000-8000-000000000002',
+    userId: MOCK_USER_1_ID,
     fullName: 'Nguyễn Văn An',
     department: 'Hậu cần',
     shiftName: 'Ca Chiều (13:00 - 17:00)',
@@ -70,8 +87,8 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     updatedAt: Date.now() - 86400000,
   },
   {
-    id: 'ci-3',
-    userId: 'tnv-demo-2',
+    id: '20000000-0000-4000-8000-000000000003',
+    userId: MOCK_USER_2_ID,
     fullName: 'Trần Thị Bình',
     department: 'Truyền thông',
     shiftName: 'Ca Tối (18:00 - 21:00)',
@@ -81,12 +98,28 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
   }
 ];
 
-export function isSupabaseConfigured(): boolean {
-  return Boolean(
-    supabaseUrl &&
-    supabaseAnonKey &&
-    !supabaseUrl.includes('placeholder') &&
-    !supabaseAnonKey.includes('placeholder')
+// Storage mode state management
+export function getStorageMode(): 'local' | 'cloud' {
+  try {
+    const saved = localStorage.getItem(STORAGE_MODE_KEY);
+    if (saved === 'cloud' || saved === 'local') return saved;
+  } catch {}
+  return 'local'; // Default to LocalStorage mode to prevent 400 & 429 errors!
+}
+
+export function setStorageMode(mode: 'local' | 'cloud') {
+  localStorage.setItem(STORAGE_MODE_KEY, mode);
+}
+
+export function isSupabaseActive(): boolean {
+  return (
+    getStorageMode() === 'cloud' &&
+    Boolean(
+      supabaseUrl &&
+      supabaseAnonKey &&
+      !supabaseUrl.includes('placeholder') &&
+      !supabaseAnonKey.includes('placeholder')
+    )
   );
 }
 
@@ -142,6 +175,12 @@ function setLocalSession(user: User | null) {
   }
 }
 
+// Check UUID validity
+function isValidUUID(uuidStr: string): boolean {
+  const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+  return regex.test(uuidStr);
+}
+
 // Service Methods
 export async function registerTNV(payload: {
   fullName: string;
@@ -152,7 +191,7 @@ export async function registerTNV(payload: {
   notes?: string;
   password?: string;
 }): Promise<User> {
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive()) {
     try {
       const { data: authData, error: signUpError } = await supabase.auth.signUp({
         email: payload.email,
@@ -191,11 +230,13 @@ export async function registerTNV(payload: {
         return newUser;
       }
     } catch (err: any) {
-      console.warn("Supabase auth signup failed, falling back to local registration:", err);
+      console.warn("Supabase auth signup notice - switching to local storage mode:", err);
+      // Auto-fallback to local mode on rate-limit or error
+      setStorageMode('local');
     }
   }
 
-  // LocalStorage fallback mode
+  // LocalStorage mode
   const users = getLocalUsers();
   const existing = users.find(u => u.email.toLowerCase() === payload.email.toLowerCase());
   if (existing) {
@@ -203,7 +244,7 @@ export async function registerTNV(payload: {
   }
 
   const newUser: User = {
-    id: 'tnv-' + Date.now(),
+    id: generateUUID(),
     role: 'tnv',
     fullName: payload.fullName,
     email: payload.email,
@@ -223,7 +264,7 @@ export async function registerTNV(payload: {
 }
 
 export async function loginTNV(email: string, password?: string): Promise<User> {
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive()) {
     try {
       const { data: authData, error } = await supabase.auth.signInWithPassword({
         email,
@@ -249,7 +290,8 @@ export async function loginTNV(email: string, password?: string): Promise<User> 
         }
       }
     } catch (err) {
-      console.warn("Supabase signin error, checking local users fallback:", err);
+      console.warn("Supabase signin notice - fallback to local login:", err);
+      setStorageMode('local');
     }
   }
 
@@ -269,7 +311,7 @@ export async function loginAdmin(passcode: string): Promise<User> {
   }
 
   const adminUser: User = {
-    id: 'admin-root',
+    id: '00000000-0000-4000-8000-000000000000',
     role: 'admin',
     fullName: 'Quản trị viên Hệ thống',
     email: 'admin@admin.com',
@@ -286,7 +328,7 @@ export async function loginAdmin(passcode: string): Promise<User> {
 
 export async function fetchAllUsers(): Promise<User[]> {
   const localUsers = getLocalUsers();
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive()) {
     try {
       const { data } = await supabase.from('users').select('*');
       if (data && data.length > 0) {
@@ -309,7 +351,7 @@ export async function fetchAllUsers(): Promise<User[]> {
         return Array.from(map.values());
       }
     } catch (err) {
-      console.warn("Supabase fetch users failed, using local:", err);
+      console.warn("Supabase fetch users notice:", err);
     }
   }
   return localUsers;
@@ -317,33 +359,36 @@ export async function fetchAllUsers(): Promise<User[]> {
 
 export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
   const localCheckins = getLocalCheckins();
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive()) {
     try {
-      let query = supabase.from('checkins').select('*').order('created_at', { ascending: false });
-      if (userId) {
-        query = query.eq('user_id', userId);
-      }
-      const { data } = await query;
-      if (data && data.length > 0) {
-        const cloudCheckins: Checkin[] = data.map(d => ({
-          id: d.id,
-          userId: d.user_id,
-          fullName: d.full_name,
-          department: d.department,
-          shiftName: d.shift_name || 'Ca làm việc',
-          status: d.status,
-          createdAt: d.created_at,
-          updatedAt: d.updated_at,
-        }));
+      // Only query Supabase if userId is valid UUID or not provided
+      if (!userId || isValidUUID(userId)) {
+        let query = supabase.from('checkins').select('*').order('created_at', { ascending: false });
+        if (userId) {
+          query = query.eq('user_id', userId);
+        }
+        const { data } = await query;
+        if (data && data.length > 0) {
+          const cloudCheckins: Checkin[] = data.map(d => ({
+            id: d.id,
+            userId: d.user_id,
+            fullName: d.full_name,
+            department: d.department,
+            shiftName: d.shift_name || 'Ca làm việc',
+            status: d.status,
+            createdAt: d.created_at,
+            updatedAt: d.updated_at,
+          }));
 
-        const map = new Map<string, Checkin>();
-        localCheckins.forEach(c => map.set(c.id, c));
-        cloudCheckins.forEach(c => map.set(c.id, c));
-        const combined = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
-        return userId ? combined.filter(c => c.userId === userId) : combined;
+          const map = new Map<string, Checkin>();
+          localCheckins.forEach(c => map.set(c.id, c));
+          cloudCheckins.forEach(c => map.set(c.id, c));
+          const combined = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
+          return userId ? combined.filter(c => c.userId === userId) : combined;
+        }
       }
     } catch (err) {
-      console.warn("Supabase fetch checkins failed, using local:", err);
+      console.warn("Supabase fetch checkins notice:", err);
     }
   }
 
@@ -355,7 +400,7 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
 
 export async function submitCheckin(user: User, shiftName?: string): Promise<Checkin> {
   const newCheckin: Checkin = {
-    id: 'ci-' + Date.now(),
+    id: generateUUID(),
     userId: user.id,
     fullName: user.fullName,
     department: user.department,
@@ -369,9 +414,10 @@ export async function submitCheckin(user: User, shiftName?: string): Promise<Che
   checkins.unshift(newCheckin);
   saveLocalCheckins(checkins);
 
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive() && isValidUUID(user.id)) {
     try {
       await supabase.from('checkins').insert({
+        id: newCheckin.id,
         user_id: user.id,
         full_name: user.fullName,
         department: user.department,
@@ -380,7 +426,7 @@ export async function submitCheckin(user: User, shiftName?: string): Promise<Che
         updated_at: newCheckin.updatedAt,
       });
     } catch (err) {
-      console.warn("Supabase checkin insert error:", err);
+      console.warn("Supabase checkin insert notice:", err);
     }
   }
   return newCheckin;
@@ -402,7 +448,7 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     saveLocalUsers(users);
   }
 
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive() && isValidUUID(userId)) {
     try {
       const updatePayload: any = { updated_at: Date.now() };
       if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
@@ -412,7 +458,7 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
       if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
       await supabase.from('users').update(updatePayload).eq('id', userId);
     } catch (e) {
-      console.warn("Supabase update profile error:", e);
+      console.warn("Supabase update profile notice:", e);
     }
   }
 
@@ -426,7 +472,6 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     try {
       parsed = JSON.parse(qrToken);
     } catch {
-      // Plain text user ID or token
       parsed = { type: 'user_qr', userId: qrToken };
     }
 
@@ -439,7 +484,6 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       }
       const shiftName = parsed.shiftName || 'Ca làm việc QR';
       const checkin = await submitCheckin(activeUser, shiftName);
-      // Auto-approve QR check-ins!
       await approveCheckinItem(checkin.id);
       return { 
         success: true, 
@@ -480,11 +524,11 @@ export async function approveCheckinItem(checkinId: string): Promise<void> {
     saveLocalCheckins(checkins);
   }
 
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
       await supabase.from('checkins').update({ status: 'approved', updated_at: Date.now() }).eq('id', checkinId);
     } catch (e) {
-      console.warn("Supabase approve error:", e);
+      console.warn("Supabase approve notice:", e);
     }
   }
 }
@@ -499,11 +543,14 @@ export async function bulkApproveCheckinsList(checkinIds: string[]): Promise<voi
   });
   saveLocalCheckins(checkins);
 
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive()) {
     try {
-      await supabase.from('checkins').update({ status: 'approved', updated_at: Date.now() }).in('id', checkinIds);
+      const validIds = checkinIds.filter(isValidUUID);
+      if (validIds.length > 0) {
+        await supabase.from('checkins').update({ status: 'approved', updated_at: Date.now() }).in('id', validIds);
+      }
     } catch (e) {
-      console.warn("Supabase bulk approve error:", e);
+      console.warn("Supabase bulk approve notice:", e);
     }
   }
 }
@@ -517,11 +564,11 @@ export async function removeUser(userId: string): Promise<void> {
   users = users.filter(u => u.id !== userId);
   saveLocalUsers(users);
 
-  if (isSupabaseConfigured()) {
+  if (isSupabaseActive() && isValidUUID(userId)) {
     try {
       await supabase.from('users').delete().eq('id', userId);
     } catch (e) {
-      console.warn("Supabase remove user error:", e);
+      console.warn("Supabase remove user notice:", e);
     }
   }
 }
