@@ -325,6 +325,14 @@ export default function TNVDashboard() {
                     <div className="text-xs text-gray-500 mt-1">
                       📅 Ngày: {ci.workDate || format(ci.createdAt, 'dd/MM/yyyy')} &bull; Ghi nhận: {format(ci.createdAt, 'HH:mm')}
                     </div>
+                    <div className="text-[11px] text-gray-500 mt-1 flex items-center gap-2">
+                      <span className={ci.checkinTime ? "text-emerald-700 font-bold" : "text-gray-400"}>
+                        📍 In: {ci.checkinTime ? format(ci.checkinTime, 'HH:mm') : 'Chưa quét'}
+                      </span>
+                      <span className={ci.checkoutTime ? "text-emerald-700 font-bold" : "text-amber-600 font-bold"}>
+                        🏁 Out: {ci.checkoutTime ? format(ci.checkoutTime, 'HH:mm') : 'Chưa quét Out'}
+                      </span>
+                    </div>
                     {ci.adminNote && (
                       <div className="text-[11px] text-amber-700 bg-amber-50 px-2 py-0.5 rounded mt-1 italic">
                         📝 Ghi chú Admin: {ci.adminNote}
@@ -332,21 +340,32 @@ export default function TNVDashboard() {
                     )}
                   </div>
                   <div>
-                    {ci.status === 'pending' ? (
-                      <span className="px-3 py-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full">
-                        ⏳ Chờ duyệt
-                      </span>
-                    ) : ci.status === 'rejected' ? (
-                      <span className="px-3 py-1 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-full">
-                        ❌ Từ chối
-                      </span>
-                    ) : (
+                    {ci.checkinTime && ci.checkoutTime && ci.status === 'approved' ? (
                       <div className="text-right">
                         <span className="px-3 py-1 text-xs font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-full block">
-                          ✓ Đã duyệt
+                          ✓ Đủ Check-in & Out (Đã Duyệt)
                         </span>
                         <span className="text-[10px] text-gray-400 block mt-1">📧 Đã gửi Email</span>
                       </div>
+                    ) : ci.checkinTime && !ci.checkoutTime ? (
+                      <span className="px-3 py-1 text-xs font-bold text-amber-700 bg-amber-50 border border-amber-200 rounded-full block">
+                        🟡 Đã Check-in (Chờ Check-out)
+                      </span>
+                    ) : ci.status === 'approved' ? (
+                      <div className="text-right">
+                        <span className="px-3 py-1 text-xs font-bold text-blue-700 bg-blue-50 border border-blue-200 rounded-full block">
+                          ✓ Admin Duyệt Thủ Công
+                        </span>
+                        <span className="text-[10px] text-gray-400 block mt-1">📧 Đã gửi Email</span>
+                      </div>
+                    ) : ci.status === 'rejected' ? (
+                      <span className="px-3 py-1 text-xs font-bold text-red-700 bg-red-50 border border-red-200 rounded-full block">
+                        ❌ Từ chối
+                      </span>
+                    ) : (
+                      <span className="px-3 py-1 text-xs font-bold text-gray-600 bg-gray-100 border border-gray-200 rounded-full block">
+                        ⏳ Chờ Check-in & Out
+                      </span>
                     )}
                   </div>
                 </div>

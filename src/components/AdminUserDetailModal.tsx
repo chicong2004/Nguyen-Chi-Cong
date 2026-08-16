@@ -161,17 +161,25 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                         </div>
 
                         <div className="flex items-center gap-1">
-                          {shift.status === 'approved' ? (
-                            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                              ✓ Đã duyệt
+                          {shift.checkinTime && shift.checkoutTime && shift.status === 'approved' ? (
+                            <span className="bg-emerald-100 text-emerald-800 text-[10px] px-2 py-0.5 rounded-full font-bold border border-emerald-200">
+                              ✓ Đã đủ Check-in & Out (Đã Duyệt)
+                            </span>
+                          ) : shift.checkinTime && !shift.checkoutTime ? (
+                            <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold border border-amber-200">
+                              🟡 Đã Check-in (Chờ Check-out)
+                            </span>
+                          ) : shift.status === 'approved' ? (
+                            <span className="bg-blue-100 text-blue-800 text-[10px] px-2 py-0.5 rounded-full font-bold border border-blue-200">
+                              ✓ Admin Duyệt Thủ Công
                             </span>
                           ) : shift.status === 'rejected' ? (
-                            <span className="bg-red-100 text-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
+                            <span className="bg-red-100 text-red-800 text-[10px] px-2 py-0.5 rounded-full font-bold border border-red-200">
                               ❌ Từ chối
                             </span>
                           ) : (
-                            <span className="bg-amber-100 text-amber-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
-                              ⏳ Chờ duyệt
+                            <span className="bg-gray-100 text-gray-600 text-[10px] px-2 py-0.5 rounded-full font-bold border border-gray-200">
+                              ⏳ Chờ Check-in & Out
                             </span>
                           )}
                         </div>
@@ -180,6 +188,16 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                       <div className="flex items-center justify-between text-xs text-gray-600 pt-1">
                         <span>🏢 Bộ phận: <strong className="text-blue-700">{shift.department}</strong> | OT: <strong className="text-purple-700">+{shift.otHours || 0}h</strong></span>
                         <span className="font-extrabold text-emerald-700">Thù lao: {shiftPay.toLocaleString()} VND</span>
+                      </div>
+
+                      {/* QR Timestamps */}
+                      <div className="flex items-center gap-3 text-[11px] bg-gray-50 p-2 rounded-xl border border-gray-100">
+                        <span className={shift.checkinTime ? "text-emerald-700 font-bold" : "text-gray-400"}>
+                          📍 In: {shift.checkinTime ? format(shift.checkinTime, 'HH:mm dd/MM') : 'Chưa quét'}
+                        </span>
+                        <span className={shift.checkoutTime ? "text-emerald-700 font-bold" : "text-amber-600 font-bold"}>
+                          🏁 Out: {shift.checkoutTime ? format(shift.checkoutTime, 'HH:mm dd/MM') : 'Chưa quét Check-out'}
+                        </span>
                       </div>
 
                       {shift.adminNote && (

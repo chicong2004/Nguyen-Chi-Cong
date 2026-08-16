@@ -722,7 +722,7 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     const existingPending = userCheckins.find(c => c.workDate === workDate || !c.checkoutTime);
 
     if (actionType === 'checkout') {
-      if (existingPending) {
+      if (existingPending && existingPending.checkinTime) {
         existingPending.checkoutTime = Date.now();
         existingPending.type = 'full';
         existingPending.status = 'approved';
@@ -750,45 +750,23 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
 
         return {
           success: true,
-          message: `📍 CHECK-OUT THÀNH CÔNG! Đã hoàn thành và tự động duyệt ca "${existingPending.shiftName}".`,
+          message: `🏁 CHECK-OUT THÀNH CÔNG! Đã hoàn thành đủ 2 lượt Check-in & Out. Ca "${existingPending.shiftName}" đã được tự động duyệt & tính công!`,
           checkin: existingPending,
         };
       } else {
-        const checkin = await submitScheduleRegistration(activeUser, workDate, shiftName, 0);
-        checkin.checkinTime = Date.now();
-        checkin.checkoutTime = Date.now();
-        checkin.type = 'full';
-        checkin.status = 'approved';
-
-        // Update local storage
-        const allCheckins = getLocalCheckins();
-        const idx = allCheckins.findIndex(c => c.id === checkin.id);
-        if (idx !== -1) {
-          allCheckins[idx] = checkin;
-          saveLocalCheckins(allCheckins);
-        }
-
-        // Update Supabase
-        if (isSupabaseActive() && isValidUUID(checkin.id)) {
-          await supabase.from('checkins').update({
-            status: 'approved',
-            checkin_time: checkin.checkinTime,
-            checkout_time: checkin.checkoutTime,
-            updated_at: Date.now(),
-          }).eq('id', checkin.id);
-        }
-
-        await approveCheckinItem(checkin.id);
         return {
-          success: true,
-          message: `📍 CHECK-OUT THÀNH CÔNG cho ca "${shiftName}".`,
-          checkin,
+          success: false,
+          message: `⚠️ Bạn CHƯA THỰC HIỆN CHECK-IN cho ca "${shiftName}" ngày ${workDate}! Phải hoàn thành cả Check-in và Check-out mới được tự động duyệt & tính công.`,
         };
       }
     } else {
-      const checkin = await submitScheduleRegistration(activeUser, workDate, shiftName, 0);
+      let checkin = existingPending;
+      if (!checkin) {
+        checkin = await submitScheduleRegistration(activeUser, workDate, shiftName, 0);
+      }
       checkin.checkinTime = Date.now();
-      checkin.status = 'approved';
+      checkin.status = 'pending'; // 🛑 STAYS PENDING UNTIL CHECK-OUT IS SCANNED!
+      checkin.updatedAt = Date.now();
 
       // Update local storage
       const allCheckins = getLocalCheckins();
@@ -801,16 +779,17 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       // Update Supabase
       if (isSupabaseActive() && isValidUUID(checkin.id)) {
         await supabase.from('checkins').update({
-          status: 'approved',
+          status: 'pending',
           checkin_time: checkin.checkinTime,
           updated_at: Date.now(),
         }).eq('id', checkin.id);
       }
 
-      await approveCheckinItem(checkin.id);
+      await triggerCloudSync();
+
       return {
         success: true,
-        message: `✅ CHECK-IN THÀNH CÔNG! Đã điểm danh tự động cho ca "${shiftName}".`,
+        message: `📍 CHECK-IN THÀNH CÔNG! Đã ghi nhận giờ vào lúc ${format(checkin.checkinTime, 'HH:mm')}. Bạn cần quét CHECK-OUT khi kết thúc ca để được tự động duyệt & tính công!`,
         checkin,
       };
     }
