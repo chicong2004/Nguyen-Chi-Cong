@@ -8,18 +8,22 @@ interface AdminDailyQRModalProps {
 }
 
 export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModalProps) {
-  const [selectedShift, setSelectedShift] = useState('Ca Sáng (07:00 - 12:00)');
   const [qrType, setQrType] = useState<'event_checkin' | 'event_checkout'>('event_checkin');
+  const [refreshKey, setRefreshKey] = useState<number>(Date.now());
   const currentDate = format(new Date(), 'yyyy-MM-dd');
 
   if (!isOpen) return null;
 
   const qrPayload = JSON.stringify({
     type: qrType,
-    shiftName: selectedShift,
     date: currentDate,
-    code: `QR-${currentDate}-${qrType === 'event_checkin' ? 'IN' : 'OUT'}`,
+    key: refreshKey,
+    code: `QR-${currentDate}-${qrType === 'event_checkin' ? 'IN' : 'OUT'}-${refreshKey.toString().slice(-4)}`,
   });
+
+  const handleRefreshQR = () => {
+    setRefreshKey(Date.now());
+  };
 
   const handlePrint = () => {
     window.print();
@@ -35,18 +39,18 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
           ✕
         </button>
 
-        <h3 className="text-xl font-black text-gray-900 mb-1">
-          📱 Tạo Mã QR Điểm Danh Hàng Ngày
+        <h3 className="text-xl font-black text-gray-900 mb-1 flex items-center justify-center gap-2">
+          <span>📱</span> Mã QR Điểm Danh Sự Kiện Hàng Ngày
         </h3>
         <p className="text-xs text-gray-500 mb-4">
-          Tạo mã QR Check-in (Vào ca) hoặc Check-out (Ra ca) để TNV quét bằng camera trên máy của họ.
+          Mã QR ghi nhận điểm danh Check-in (Vào ca) hoặc Check-out (Ra ca) dùng chung cho tất cả TNV & CTV.
         </p>
 
         {/* QR Type Toggle */}
-        <div className="grid grid-cols-2 gap-2 mb-4 bg-gray-100 p-1 rounded-2xl">
+        <div className="grid grid-cols-2 gap-2 mb-4 bg-gray-100 p-1.5 rounded-2xl">
           <button
             onClick={() => setQrType('event_checkin')}
-            className={`py-2 text-xs font-bold rounded-xl transition ${
+            className={`py-2.5 text-xs font-bold rounded-xl transition ${
               qrType === 'event_checkin'
                 ? 'bg-emerald-600 text-white shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
@@ -56,7 +60,7 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
           </button>
           <button
             onClick={() => setQrType('event_checkout')}
-            className={`py-2 text-xs font-bold rounded-xl transition ${
+            className={`py-2.5 text-xs font-bold rounded-xl transition ${
               qrType === 'event_checkout'
                 ? 'bg-amber-600 text-white shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
@@ -66,51 +70,45 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
           </button>
         </div>
 
-        <div className="mb-4 text-left">
-          <label className="block text-xs font-bold text-gray-700 mb-1">Chọn ca làm việc hôm nay:</label>
-          <select
-            value={selectedShift}
-            onChange={(e) => setSelectedShift(e.target.value)}
-            className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-          >
-            <option value="Ca Sáng (07:00 - 12:00)">Ca Sáng (07:00 - 12:00)</option>
-            <option value="Ca Chiều (13:00 - 17:30)">Ca Chiều (13:00 - 17:30)</option>
-            <option value="Ca Tối / OT (18:00 - 22:00)">Ca Tối / OT (18:00 - 22:00)</option>
-            <option value="Ca Cả Ngày (07:00 - 17:30)">Ca Cả Ngày (07:00 - 17:30)</option>
-          </select>
-        </div>
-
         {/* Display QR SVG */}
         <div className={`p-6 rounded-3xl border-2 flex flex-col items-center justify-center mb-4 shadow-inner ${
           qrType === 'event_checkin' ? 'bg-emerald-50/50 border-emerald-200' : 'bg-amber-50/50 border-amber-200'
         }`}>
-          <QRCodeSVG value={qrPayload} size={220} level="H" includeMargin={true} />
+          <QRCodeSVG value={qrPayload} size={230} level="H" includeMargin={true} />
           
           <div className={`mt-3 text-xs font-bold px-3 py-1 rounded-full border ${
             qrType === 'event_checkin' 
               ? 'bg-emerald-100 text-emerald-800 border-emerald-300' 
               : 'bg-amber-100 text-amber-800 border-amber-300'
           }`}>
-            {qrType === 'event_checkin' ? '📍 CHECK-IN' : '🏁 CHECK-OUT'}: {selectedShift}
+            {qrType === 'event_checkin' ? '📍 QR CHECK-IN TỔNG (VÀO CA)' : '🏁 QR CHECK-OUT TỔNG (RA CA)'}
           </div>
           <span className="text-[11px] text-gray-400 mt-1">
-            Ngày: {format(new Date(), 'dd/MM/yyyy')} &bull; Mã: {currentDate}-{qrType === 'event_checkin' ? 'IN' : 'OUT'}
+            Ngày: {format(new Date(), 'dd/MM/yyyy')} &bull; Mã phiên: #{refreshKey.toString().slice(-6)}
           </span>
         </div>
 
-        <div className="flex gap-2">
+        {/* Action buttons including Refresh QR */}
+        <div className="grid grid-cols-3 gap-2">
+          <button
+            onClick={handleRefreshQR}
+            className="py-2.5 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold transition flex items-center justify-center gap-1"
+            title="Tạo mã QR mới"
+          >
+            🔄 Làm Mới Mã
+          </button>
           <button
             onClick={handlePrint}
-            className="flex-1 py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition flex items-center justify-center gap-1.5"
+            className="py-2.5 bg-gray-900 text-white rounded-xl text-xs font-bold hover:bg-black transition flex items-center justify-center gap-1"
           >
-            🖨️ In / Trình chiếu QR
+            🖨️ In / Trình Chiếu
           </button>
           <button
             onClick={() => {
               navigator.clipboard.writeText(qrPayload);
               alert("Đã sao chép nội dung QR!");
             }}
-            className="px-4 py-2.5 bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-200 transition"
+            className="py-2.5 bg-gray-100 text-gray-700 rounded-xl text-xs font-semibold hover:bg-gray-200 transition"
           >
             📋 Sao chép
           </button>

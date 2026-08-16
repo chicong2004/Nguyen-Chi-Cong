@@ -707,65 +707,76 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     try {
       parsed = JSON.parse(qrToken);
     } catch {
-      parsed = { type: 'event_checkin', shiftName: 'Ca Sáng (07:00 - 12:00)' };
+      parsed = { type: 'event_checkin' };
     }
 
     if (!activeUser) {
       return { success: false, message: 'Vui lòng đăng nhập tài khoản TNV để quét QR điểm danh!' };
     }
 
-    const shiftName = parsed.shiftName || 'Ca làm việc';
     const actionType = parsed.type === 'event_checkout' ? 'checkout' : 'checkin';
     const workDate = parsed.date || format(new Date(), 'yyyy-MM-dd');
 
     const userCheckins = await fetchCheckins(activeUser.id);
-    const existingPending = userCheckins.find(c => c.workDate === workDate || !c.checkoutTime);
+
+    // Find checkin for today or any open shift without checkout
+    let existingShift = userCheckins.find(c => c.workDate === workDate && !c.checkoutTime);
+    if (!existingShift) {
+      existingShift = userCheckins.find(c => c.workDate === workDate);
+    }
+    if (!existingShift) {
+      existingShift = userCheckins.find(c => !c.checkoutTime);
+    }
 
     if (actionType === 'checkout') {
-      if (existingPending && existingPending.checkinTime) {
-        existingPending.checkoutTime = Date.now();
-        existingPending.type = 'full';
-        existingPending.status = 'approved';
-        existingPending.updatedAt = Date.now();
+      const openShift = userCheckins.find(c => c.checkinTime && !c.checkoutTime) || existingShift;
+
+      if (openShift && openShift.checkinTime) {
+        openShift.checkoutTime = Date.now();
+        openShift.type = 'full';
+        openShift.status = 'approved';
+        openShift.updatedAt = Date.now();
 
         // Update local storage
         const allCheckins = getLocalCheckins();
-        const idx = allCheckins.findIndex(c => c.id === existingPending.id);
+        const idx = allCheckins.findIndex(c => c.id === openShift.id);
         if (idx !== -1) {
-          allCheckins[idx] = existingPending;
+          allCheckins[idx] = openShift;
           saveLocalCheckins(allCheckins);
         }
 
         // Update Supabase
-        if (isSupabaseActive() && isValidUUID(existingPending.id)) {
+        if (isSupabaseActive() && isValidUUID(openShift.id)) {
           await supabase.from('checkins').update({
             status: 'approved',
-            checkin_time: existingPending.checkinTime || null,
-            checkout_time: existingPending.checkoutTime,
+            checkin_time: openShift.checkinTime,
+            checkout_time: openShift.checkoutTime,
             updated_at: Date.now(),
-          }).eq('id', existingPending.id);
+          }).eq('id', openShift.id);
         }
 
-        await approveCheckinItem(existingPending.id);
+        await approveCheckinItem(openShift.id);
 
         return {
           success: true,
-          message: `🏁 CHECK-OUT THÀNH CÔNG! Đã hoàn thành đủ 2 lượt Check-in & Out. Ca "${existingPending.shiftName}" đã được tự động duyệt & tính công!`,
-          checkin: existingPending,
+          message: `🏁 CHECK-OUT THÀNH CÔNG! Đã ghi nhận giờ ra lúc ${format(openShift.checkoutTime, 'HH:mm')}. Ca làm (${openShift.shiftName}) đã được tự động duyệt & tính công!`,
+          checkin: openShift,
         };
       } else {
         return {
           success: false,
-          message: `⚠️ Bạn CHƯA THỰC HIỆN CHECK-IN cho ca "${shiftName}" ngày ${workDate}! Phải hoàn thành cả Check-in và Check-out mới được tự động duyệt & tính công.`,
+          message: `⚠️ Bạn CHƯA THỰC HIỆN CHECK-IN cho ca ngày ${workDate}! Phải hoàn thành cả Check-in và Check-out mới được tự động duyệt & tính công.`,
         };
       }
     } else {
-      let checkin = existingPending;
+      // CHECK-IN ACTION
+      let checkin = existingShift;
       if (!checkin) {
-        checkin = await submitScheduleRegistration(activeUser, workDate, shiftName, 0);
+        checkin = await submitScheduleRegistration(activeUser, workDate, 'Ca làm việc', 0);
       }
+
       checkin.checkinTime = Date.now();
-      checkin.status = 'pending'; // 🛑 STAYS PENDING UNTIL CHECK-OUT IS SCANNED!
+      checkin.status = 'pending'; // 🛑 STAYS PENDING UNTIL CHECK-OUT!
       checkin.updatedAt = Date.now();
 
       // Update local storage
@@ -789,7 +800,7 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
 
       return {
         success: true,
-        message: `📍 CHECK-IN THÀNH CÔNG! Đã ghi nhận giờ vào lúc ${format(checkin.checkinTime, 'HH:mm')}. Bạn cần quét CHECK-OUT khi kết thúc ca để được tự động duyệt & tính công!`,
+        message: `📍 CHECK-IN THÀNH CÔNG! Đã ghi nhận giờ vào lúc ${format(checkin.checkinTime, 'HH:mm')}. Hãy nhớ quét CHECK-OUT khi ra về để được tự động duyệt & tính công!`,
         checkin,
       };
     }
