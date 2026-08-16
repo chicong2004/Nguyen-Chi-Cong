@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
 import { Checkin, User } from '../types';
-import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, getDepartmentRate } from '../services/dataService';
+import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate } from '../services/dataService';
 import { format } from 'date-fns';
 import QRScannerModal from './QRScannerModal';
 
@@ -27,7 +27,7 @@ export default function TNVDashboard() {
   const loadUserData = async () => {
     if (!userProfile?.id) return;
     try {
-      // 1. Fetch updated users to sync latest salary rate configured by Admin
+      // 1. Fetch updated users to sync latest profile configured by Admin
       const allUsers = await fetchAllUsers();
       const updatedProfile = allUsers.find(u => u.id === userProfile.id);
       if (updatedProfile) {
@@ -99,7 +99,9 @@ export default function TNVDashboard() {
 
   const approvedShifts = checkins.filter(c => c.status === 'approved').length;
   const pendingShifts = checkins.filter(c => c.status === 'pending').length;
-  const estimatedEarned = approvedShifts * (activeProfile.salaryRate || 50000);
+  const estimatedEarned = checkins
+    .filter(c => c.status === 'approved')
+    .reduce((sum, c) => sum + calculateShiftPay(c.shiftName, activeProfile.salaryRate, c.otHours), 0);
 
   return (
     <div className="max-w-xl mx-auto min-h-screen bg-gray-50 flex flex-col pb-12 text-gray-900">
@@ -129,16 +131,16 @@ export default function TNVDashboard() {
       </div>
 
       <div className="p-6 space-y-6 flex-1">
-        {/* Basic Stats Cards with Live Admin Salary Sync */}
+        {/* Basic Stats Cards with Accumulated Total Earnings */}
         <div className="grid grid-cols-2 gap-3">
           <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-2xs">
             <span className="text-xs text-gray-500 font-medium">Ca đã được duyệt</span>
             <div className="text-2xl font-black text-emerald-600 mt-1">{approvedShifts} <span className="text-xs font-normal text-gray-500">ca</span></div>
-            <span className="text-[11px] text-gray-400 font-semibold">{(activeProfile.salaryRate || 50000).toLocaleString()} VND/ca (Đã đồng bộ Admin)</span>
+            <span className="text-[11px] text-emerald-700 font-semibold">✓ Đã duyệt hoàn tất</span>
           </div>
 
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs">
-            <span className="text-xs text-gray-500 font-medium">Thu nhập tích luỹ</span>
+            <span className="text-xs text-gray-500 font-medium">Thu nhập tích luỹ tổng</span>
             <div className="text-2xl font-black text-blue-600 mt-1">{estimatedEarned.toLocaleString()} <span className="text-xs font-normal">VND</span></div>
             <span className="text-[11px] text-amber-600 font-bold">{pendingShifts} ca chờ duyệt</span>
           </div>
@@ -188,15 +190,9 @@ export default function TNVDashboard() {
                 className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
               >
                 {departmentsList.map(dep => (
-                  <option key={dep} value={dep}>
-                    {dep} ({getDepartmentRate(dep).toLocaleString('vi-VN')}đ/ca)
-                  </option>
+                  <option key={dep} value={dep}>{dep}</option>
                 ))}
               </select>
-              <div className="mt-1.5 flex items-center justify-between px-3 py-2 bg-emerald-50 border border-emerald-100 rounded-xl text-xs font-bold text-emerald-800">
-                <span>💰 Mức phụ cấp cho ca này:</span>
-                <span className="text-emerald-700 font-extrabold">{getDepartmentRate(selectedDepartment).toLocaleString('vi-VN')} VND / ca</span>
-              </div>
             </div>
 
             <div>

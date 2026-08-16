@@ -10,6 +10,7 @@ import {
   updateUserProfileByAdmin,
   updateCheckinAdminNote,
   getDepartmentsList,
+  calculateShiftPay,
 } from '../services/dataService';
 import { getAdminEmailSettings } from '../services/emailService';
 import { format } from 'date-fns';
@@ -87,10 +88,13 @@ export default function AdminDashboard() {
   // Metrics
   const totalApprovedCheckins = checkins.filter(c => c.status === 'approved').length;
   const totalPendingCheckins = checkins.filter(c => c.status === 'pending').length;
-  const totalPayroll = users.reduce((sum, u) => {
-    const userApprovedCount = checkins.filter(c => c.userId === u.id && c.status === 'approved').length;
-    return sum + (userApprovedCount * (u.salaryRate || 50000));
-  }, 0);
+  const totalPayroll = checkins
+    .filter(c => c.status === 'approved')
+    .reduce((sum, c) => {
+      const user = users.find(u => u.id === c.userId);
+      const rate = user?.salaryRate || 50000;
+      return sum + calculateShiftPay(c.shiftName, rate, c.otHours);
+    }, 0);
 
   const handleApproveSingle = async (checkin: Checkin) => {
     try {
@@ -166,13 +170,15 @@ export default function AdminDashboard() {
     const exportData = users.map(user => {
       const userCheckins = checkins.filter(c => c.userId === user.id && c.status === 'approved');
       const approvedShifts = userCheckins.length;
-      const totalSalary = approvedShifts * (user.salaryRate || 50000);
+      const totalOT = userCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);
+      const totalSalary = userCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, user.salaryRate, c.otHours), 0);
       return {
         'Họ và Tên': user.fullName,
         'Số điện thoại': `"${user.phone}"`,
         'Bộ phận': user.department,
         'Mức phụ cấp/ca (VND)': user.salaryRate || 50000,
         'Số ca đã duyệt': approvedShifts,
+        'Tổng giờ OT làm thêm': totalOT,
         'Tổng phụ cấp nhận (VND)': totalSalary,
       };
     });
@@ -377,8 +383,10 @@ export default function AdminDashboard() {
                 <tbody className="divide-y divide-gray-100">
                   {filteredUsers.map(user => {
                     const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
-                    const approvedCount = userCheckins.filter(c => c.status === 'approved').length;
-                    const userTotalSalary = approvedCount * (user.salaryRate || 50000);
+                    const approvedCheckins = userCheckins.filter(c => c.status === 'approved');
+                    const approvedCount = approvedCheckins.length;
+                    const totalOTHours = approvedCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);
+                    const userTotalSalary = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, user.salaryRate, c.otHours), 0);
 
                     return (
                       <tr key={user.id} className="hover:bg-blue-50/30 transition">
@@ -421,14 +429,24 @@ export default function AdminDashboard() {
 
                         {/* Approved count */}
                         <td className="px-4 py-3 text-center align-top font-bold text-sm">
-                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200 block">
                             {approvedCount} ca
                           </span>
+                          {totalOTHours > 0 && (
+                            <span className="text-[10px] text-purple-700 font-bold block mt-1">
+                              +{totalOTHours}h OT
+                            </span>
+                          )}
                         </td>
 
                         {/* Total Salary */}
                         <td className="px-4 py-3 text-right align-top font-black text-emerald-600 text-sm">
-                          {userTotalSalary.toLocaleString()} VND
+                          <div>{userTotalSalary.toLocaleString()} VND</div>
+                          {totalOTHours > 0 && (
+                            <span className="text-[10px] text-purple-600 font-bold block">
+                              (Đã cộng +{(totalOTHours * 25000).toLocaleString()}đ OT)
+                            </span>
+                          )}
                         </td>
 
                         {/* Schedules & QR Checkin/Checkout logs + Admin Notes */}
@@ -437,16 +455,29 @@ export default function AdminDashboard() {
                             <span className="text-gray-400 italic text-[11px]">Chưa có lịch đăng ký nào</span>
                           ) : (
                             <div className="space-y-2 max-h-36 overflow-y-auto pr-1">
-                              {userCheckins.map(ci => (
-                                <div key={ci.id} className="p-2 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
-                                  <div className="flex items-center justify-between font-bold text-gray-900 text-xs">
-                                    <span>📅 {ci.workDate || format(ci.createdAt, 'dd/MM/yyyy')}: {ci.shiftName}</span>
-                                    {ci.otHours ? (
-                                      <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.2 rounded font-bold">
-                                        +{ci.otHours}h OT
-                                      </span>
-                                    ) : null}
-                                  </div>
+                              {userCheckins.map(ci => {
+                                const isFullDay = (ci.shiftName || '').includes('Cả Ngày') || (ci.shiftName || '').toLowerCase().includes('full');
+                                const shiftPay = calculateShiftPay(ci.shiftName, user.salaryRate, ci.otHours);
+                                return (
+                                  <div key={ci.id} className="p-2 bg-gray-50 rounded-xl border border-gray-200 space-y-1">
+                                    <div className="flex items-center justify-between font-bold text-gray-900 text-xs gap-1">
+                                      <span className="truncate">📅 {ci.workDate || format(ci.createdAt, 'dd/MM/yyyy')}: {ci.shiftName}</span>
+                                      <div className="flex items-center gap-1 shrink-0">
+                                        {isFullDay && (
+                                          <span className="bg-amber-100 text-amber-800 text-[10px] px-1.5 py-0.2 rounded font-extrabold">
+                                            ⚡ 2x Cả Ngày
+                                          </span>
+                                        )}
+                                        {ci.otHours ? (
+                                          <span className="bg-purple-100 text-purple-800 text-[10px] px-1.5 py-0.2 rounded font-extrabold">
+                                            +{ci.otHours}h OT (+{(ci.otHours * 25000).toLocaleString()}đ)
+                                          </span>
+                                        ) : null}
+                                      </div>
+                                    </div>
+                                    <div className="text-[10px] text-emerald-700 font-bold">
+                                      Thù lao ca này: {shiftPay.toLocaleString()} VND {isFullDay ? '(2x Lương)' : ''} {ci.otHours ? `(Cộng +${(ci.otHours * 25000).toLocaleString()}đ OT)` : ''}
+                                    </div>
 
                                   {/* Check-in & Check-out Automatic Data */}
                                   <div className="flex items-center gap-3 text-[11px] text-gray-500">
@@ -481,7 +512,8 @@ export default function AdminDashboard() {
                                     )}
                                   </div>
                                 </div>
-                              ))}
+                              );
+                            })}
                             </div>
                           )}
                         </td>

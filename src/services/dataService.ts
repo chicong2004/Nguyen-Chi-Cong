@@ -137,6 +137,15 @@ export function getDepartmentRate(deptName: string): number {
   return 50000;
 }
 
+export function calculateShiftPay(shiftName: string, salaryRate: number, otHours: number = 0, otHourlyRate: number = 25000): number {
+  const baseRate = Number(salaryRate) || 50000;
+  const isFullDay = (shiftName || '').includes('Cả Ngày') || (shiftName || '').toLowerCase().includes('full');
+  const multiplier = isFullDay ? 2 : 1;
+  const shiftBasePay = baseRate * multiplier;
+  const otPay = (Number(otHours) || 0) * otHourlyRate;
+  return shiftBasePay + otPay;
+}
+
 export function saveDepartmentRates(rates: Record<string, number>) {
   saveDepartmentsAndRates(getDepartmentsList(), rates);
 }
