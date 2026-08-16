@@ -739,13 +739,27 @@ export async function submitScheduleRegistration(
     } catch {}
   }
 
-  // 1 Account per Event Constraint: Each account can only register 1 shift for a specific event!
-  if (eventId) {
-    const existingCheckins = getLocalCheckins();
-    const duplicateForEvent = existingCheckins.find(c => c.userId === user.id && c.eventId === eventId);
-    if (duplicateForEvent) {
-      throw new Error(`⚠️ Bạn đã đăng ký ca làm việc cho sự kiện "${eventName || 'này'}" trước đó! Mỗi tài khoản chỉ được đăng ký 1 lần cho mỗi sự kiện.`);
-    }
+  // Update existing shift if already registered for this event, or create a new shift
+  const existingCheckins = getLocalCheckins();
+  const existingShift = existingCheckins.find(c => c.userId === user.id && (eventId ? (c.eventId === eventId || c.eventName === eventName) : true));
+
+  if (existingShift) {
+    existingShift.workDate = workDate;
+    existingShift.shiftName = shiftName;
+    existingShift.otHours = otHours;
+    existingShift.department = chosenDepartment;
+    if (eventId) existingShift.eventId = eventId;
+    if (eventName) existingShift.eventName = eventName;
+    if (notes) existingShift.adminNote = notes;
+    existingShift.status = 'pending';
+    existingShift.updatedAt = Date.now();
+
+    saveLocalCheckins(existingCheckins);
+    await triggerCloudSync();
+    await safeSupabaseUpsertUser(user);
+    await safeSupabaseUpsertCheckin(existingShift);
+
+    return existingShift;
   }
 
   const newSchedule: Checkin = {
@@ -766,9 +780,8 @@ export async function submitScheduleRegistration(
     updatedAt: Date.now(),
   };
 
-  const checkins = getLocalCheckins();
-  checkins.unshift(newSchedule);
-  saveLocalCheckins(checkins);
+  existingCheckins.unshift(newSchedule);
+  saveLocalCheckins(existingCheckins);
 
   await triggerCloudSync();
   await safeSupabaseUpsertUser(user);

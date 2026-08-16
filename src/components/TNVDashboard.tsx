@@ -147,9 +147,9 @@ export default function TNVDashboard() {
       setSuccessMessage(`Đã gửi đăng ký lịch làm việc ca (${selectedDepartment} - ${selectedDate} - ${selectedShift})! Đang chờ Admin duyệt.`);
       setNotes('');
       await loadUserData();
-    } catch (err) {
+    } catch (err: any) {
       console.error("Lỗi đăng ký lịch:", err);
-      alert("Không thể gửi đăng ký lịch, vui lòng thử lại.");
+      alert(err.message || "Không thể gửi đăng ký lịch, vui lòng thử lại.");
     } finally {
       setIsSubmitting(false);
     }
