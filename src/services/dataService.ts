@@ -628,6 +628,8 @@ export async function fetchAllUsers(): Promise<User[]> {
             phone: d.phone,
             facebookLink: d.facebook_link || '',
             department: d.department,
+            eventId: d.event_id || '',
+            eventName: d.event_name || '',
             salaryRate: Number(d.salary_rate) || 50000,
             createdAt: Number(d.created_at),
             updatedAt: Number(d.updated_at),
@@ -728,13 +730,21 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
           saveLocalCheckins(finalCheckins);
 
           if (userId) {
-            return finalCheckins.filter(c => c.userId === userId);
+            const targetUser = users.find(u => u.id === userId);
+            return finalCheckins.filter(c => 
+              c.userId === userId || 
+              (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
+            );
           }
           return finalCheckins;
         } else {
           const localCheckins = getLocalCheckins();
           if (userId) {
-            return localCheckins.filter(c => c.userId === userId);
+            const targetUser = users.find(u => u.id === userId);
+            return localCheckins.filter(c => 
+              c.userId === userId || 
+              (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
+            );
           }
           return localCheckins;
         }
@@ -746,7 +756,11 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
 
   const localCheckins = getLocalCheckins();
   if (userId) {
-    return localCheckins.filter(c => c.userId === userId);
+    const targetUser = users.find(u => u.id === userId);
+    return localCheckins.filter(c => 
+      c.userId === userId || 
+      (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
+    );
   }
   return localCheckins;
 }
