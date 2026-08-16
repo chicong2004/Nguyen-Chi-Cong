@@ -99,13 +99,23 @@ export default function AdminDashboard() {
 
       let matchesEvent = true;
       if (selectedEventFilter !== 'all') {
-        const userEventCheckins = checkins.filter(c => c.userId === u.id && c.eventId === selectedEventFilter);
-        matchesEvent = userEventCheckins.length > 0;
+        const targetEvt = eventsList.find(e => e.id === selectedEventFilter);
+        const targetEvtName = targetEvt?.name;
+
+        const hasMatchingCheckin = checkins.some(c => 
+          c.userId === u.id && (
+            c.eventId === selectedEventFilter || 
+            (targetEvtName && c.eventName === targetEvtName)
+          )
+        );
+        const hasMatchingUserEvent = u.eventId === selectedEventFilter || (targetEvtName && u.eventName === targetEvtName);
+
+        matchesEvent = hasMatchingCheckin || hasMatchingUserEvent;
       }
 
       return matchesTab && matchesSearch && matchesEvent;
     });
-  }, [users, checkins, activeTab, searchTerm, selectedEventFilter]);
+  }, [users, checkins, activeTab, searchTerm, selectedEventFilter, eventsList]);
 
   // Metrics
   const totalApprovedCheckins = checkins.filter(c => c.status === 'approved').length;
@@ -424,21 +434,70 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Search & Department Tabs & Event Filter */}
+        {/* Event Tabs Navigation Bar */}
+        <div className="bg-white p-4 rounded-2xl border-2 border-purple-100 shadow-xs mb-4">
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-2 mb-3 pb-2 border-b border-purple-50">
+            <div className="flex items-center gap-2">
+              <span className="text-base">🎉</span>
+              <h3 className="text-xs font-black uppercase tracking-wider text-purple-900">DANH SÁCH SỰ KIỆN (Bấm để xem danh sách TNV theo từng sự kiện)</h3>
+            </div>
+            <span className="text-[11px] text-purple-600 font-semibold">
+              Đồng bộ tự động dữ liệu TNV theo sự kiện &bull; Bấm vào từng sự kiện để xem
+            </span>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setSelectedEventFilter('all')}
+              className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 ${
+                selectedEventFilter === 'all'
+                  ? 'bg-purple-600 text-white shadow-md ring-2 ring-purple-300'
+                  : 'bg-purple-50/70 text-purple-900 border border-purple-200 hover:bg-purple-100'
+              }`}
+            >
+              <span>🌐 Tất Cả Sự Kiện</span>
+              <span className={`px-2 py-0.5 rounded-full text-[10px] ${selectedEventFilter === 'all' ? 'bg-purple-800 text-white' : 'bg-purple-200 text-purple-900 font-bold'}`}>
+                {users.length} người
+              </span>
+            </button>
+
+            {eventsList.map(evt => {
+              const evtCount = users.filter(u => {
+                const hasMatchingCheckin = checkins.some(c => 
+                  c.userId === u.id && (c.eventId === evt.id || c.eventName === evt.name)
+                );
+                const hasMatchingUserEvent = u.eventId === evt.id || u.eventName === evt.name;
+                return hasMatchingCheckin || hasMatchingUserEvent;
+              }).length;
+
+              const isSelected = selectedEventFilter === evt.id;
+
+              return (
+                <button
+                  key={evt.id}
+                  onClick={() => setSelectedEventFilter(evt.id)}
+                  className={`px-4 py-2 rounded-xl text-xs font-extrabold transition flex items-center gap-2 border ${
+                    isSelected
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-md ring-2 ring-purple-300'
+                      : 'bg-white text-purple-900 border-purple-200 hover:bg-purple-50'
+                  }`}
+                >
+                  <span>🎉 {evt.name}</span>
+                  <span className={`px-2.5 py-0.5 rounded-full text-[10px] font-extrabold ${
+                    isSelected ? 'bg-purple-900 text-white' : 'bg-purple-100 text-purple-800'
+                  }`}>
+                    {evtCount} người
+                  </span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+
+        {/* Search & Department Tabs */}
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
           <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
-            {/* Event Filter */}
-            <select
-              value={selectedEventFilter}
-              onChange={(e) => setSelectedEventFilter(e.target.value)}
-              className="px-3 py-2 border border-purple-300 bg-purple-50 text-purple-900 font-bold rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500 cursor-pointer shadow-2xs"
-            >
-              <option value="all">🎉 Tất cả sự kiện ({eventsList.length})</option>
-              {eventsList.map(evt => (
-                <option key={evt.id} value={evt.id}>{evt.name}</option>
-              ))}
-            </select>
-
+            <span className="text-xs font-bold text-gray-500">Bộ phận:</span>
             <div className="flex space-x-1 overflow-x-auto pb-1 scrollbar-hide">
               {departments.map(dep => (
                 <button
@@ -476,11 +535,13 @@ export default function AdminDashboard() {
 
         {/* Main Data Table */}
         <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
-          <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
-            <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
-              📋 Danh Sách TNV & CTV Đăng Ký Theo Sự Kiện
-              <span className="text-xs font-normal bg-purple-100 text-purple-800 font-bold px-2.5 py-0.5 rounded-full">
-                {filteredUsers.length} người
+          <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+            <h3 className="font-extrabold text-gray-900 text-base flex items-center gap-2">
+              <span>📋 Danh Sách TNV & CTV Đăng Ký</span>
+              <span className="text-xs font-bold bg-purple-100 text-purple-900 px-3 py-1 rounded-full border border-purple-200">
+                {selectedEventFilter === 'all' 
+                  ? 'Tất Cả Sự Kiện' 
+                  : (eventsList.find(e => e.id === selectedEventFilter)?.name || 'Sự Kiện Đã Chọn')} ({filteredUsers.length} người)
               </span>
             </h3>
 
