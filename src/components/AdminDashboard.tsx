@@ -6,11 +6,14 @@ import {
   fetchCheckins, 
   approveCheckinItem, 
   bulkApproveCheckinsList, 
-  updateUserSalary,
-  removeUser 
+  removeUser,
+  processQRCheckin
 } from '../services/dataService';
 import { format } from 'date-fns';
 import Papa from 'papaparse';
+import AdminEditUserModal from './AdminEditUserModal';
+import AdminDailyQRModal from './AdminDailyQRModal';
+import QRScannerModal from './QRScannerModal';
 
 export default function AdminDashboard() {
   const { logout, isLocalStorageMode } = useAuth();
@@ -18,16 +21,18 @@ export default function AdminDashboard() {
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
   
+  // Modals
+  const [editingUser, setEditingUser] = useState<User | null>(null);
+  const [isDailyQROpen, setIsDailyQROpen] = useState(false);
+  const [isScannerOpen, setIsScannerOpen] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+
   // Search & Filter
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<string>('Tất cả');
 
   // Selected checkins for bulk approve
   const [selectedCheckins, setSelectedCheckins] = useState<Set<string>>(new Set());
-
-  // Editing salary
-  const [editingSalaryUser, setEditingSalaryUser] = useState<string | null>(null);
-  const [editSalaryValue, setEditSalaryValue] = useState<string>('');
 
   const loadAllData = async () => {
     try {
@@ -99,24 +104,18 @@ export default function AdminDashboard() {
     setSelectedCheckins(newSet);
   };
 
-  const saveSalary = async (uid: string) => {
-    const val = parseInt(editSalaryValue, 10);
-    if (isNaN(val)) return;
-    try {
-      await updateUserSalary(uid, val);
-      setEditingSalaryUser(null);
-      await loadAllData();
-    } catch (err) {
-      console.error(err);
-      alert("Lỗi cập nhật lương.");
-    }
-  };
-
   const handleDeleteUser = async (uid: string, name: string) => {
     if (confirm(`Bạn có chắc chắn muốn xoá TNV "${name}" khỏi hệ thống?`)) {
       await removeUser(uid);
       await loadAllData();
     }
+  };
+
+  const handleQRScanResult = async (qrText: string) => {
+    const res = await processQRCheckin(qrText);
+    setToastMessage(res.message);
+    setTimeout(() => setToastMessage(''), 5000);
+    await loadAllData();
   };
 
   // CSV Exports
@@ -127,6 +126,7 @@ export default function AdminDashboard() {
       'Số điện thoại': `"${user.phone}"`,
       'Link Facebook / Zalo': user.facebookLink || '',
       'Bộ phận': user.department,
+      'Mức phụ cấp/ca (VND)': user.salaryRate || 50000,
       'Ghi chú / Khung rảnh': user.notes || '',
       'Ngày đăng ký': format(user.createdAt, 'dd/MM/yyyy HH:mm'),
     }));
@@ -150,9 +150,9 @@ export default function AdminDashboard() {
         'Họ và Tên': user.fullName,
         'Số điện thoại': `"${user.phone}"`,
         'Bộ phận': user.department,
-        'Mức lương/ca (VND)': user.salaryRate || 50000,
+        'Mức phụ cấp/ca (VND)': user.salaryRate || 50000,
         'Số ca đã duyệt': approvedShifts,
-        'Tổng lương nhận (VND)': totalSalary,
+        'Tổng phụ cấp nhận (VND)': totalSalary,
       };
     });
 
@@ -170,6 +170,21 @@ export default function AdminDashboard() {
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-16">
+      {/* Modals */}
+      <AdminDailyQRModal isOpen={isDailyQROpen} onClose={() => setIsDailyQROpen(false)} />
+      <QRScannerModal 
+        isOpen={isScannerOpen} 
+        onClose={() => setIsScannerOpen(false)} 
+        onScanSuccess={handleQRScanResult} 
+        title="📷 Admin Quét Mã QR Thẻ TNV" 
+      />
+      <AdminEditUserModal 
+        user={editingUser} 
+        isOpen={Boolean(editingUser)} 
+        onClose={() => setEditingUser(null)} 
+        onSaved={loadAllData} 
+      />
+
       {/* Top Bar */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
@@ -186,33 +201,41 @@ export default function AdminDashboard() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">Thu thập dữ liệu đăng ký, duyệt điểm danh & quản lý lương TNV/CTV</p>
+            <p className="text-xs text-gray-500 mt-0.5">Tạo QR điểm danh, chỉnh sửa đăng ký bộ phận & chi phí phụ cấp từng TNV</p>
           </div>
 
-          <div className="flex flex-wrap gap-2.5">
+          <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setIsDailyQROpen(true)}
+              className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+            >
+              📱 Tạo QR Ca Điểm Danh
+            </button>
+
+            <button
+              onClick={() => setIsScannerOpen(true)}
+              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+            >
+              📷 Quét QR Thẻ TNV
+            </button>
+
             <button
               onClick={handleExportRegistrationsCSV}
-              className="px-3.5 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+              className="px-3 py-2 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
               Xuất Đăng Ký (CSV)
             </button>
 
             <button
               onClick={handleExportPayrollCSV}
-              className="px-3.5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+              className="px-3 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
             >
-              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 9V7a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2m2 4h10a2 2 0 002-2v-6a2 2 0 00-2-2H9a2 2 0 00-2 2v6a2 2 0 002 2zm7-5a2 2 0 11-4 0 2 2 0 014 0z" />
-              </svg>
               Xuất Bảng Lương (CSV)
             </button>
 
             <button
               onClick={logout}
-              className="px-3.5 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition"
+              className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 text-xs font-semibold rounded-xl transition"
             >
               Đăng xuất
             </button>
@@ -221,6 +244,13 @@ export default function AdminDashboard() {
       </header>
 
       <main className="max-w-7xl mx-auto p-6 space-y-6">
+        {toastMessage && (
+          <div className="p-4 bg-emerald-600 text-white text-sm font-bold rounded-2xl shadow-lg flex justify-between items-center animate-bounce">
+            <span>🎉 {toastMessage}</span>
+            <button onClick={() => setToastMessage('')} className="text-xs bg-emerald-700 px-2 py-1 rounded-lg">Đóng</button>
+          </div>
+        )}
+
         {/* Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
@@ -239,7 +269,7 @@ export default function AdminDashboard() {
           </div>
 
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">Tổng quỹ lương dự kiến</span>
+            <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">Tổng chi phí phụ cấp</span>
             <div className="text-3xl font-black text-blue-600 mt-2">{totalPayroll.toLocaleString()} <span className="text-xs font-normal text-gray-500">VND</span></div>
           </div>
         </div>
@@ -298,7 +328,6 @@ export default function AdminDashboard() {
             {filteredUsers.map(user => {
               const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
               const approvedCount = userCheckins.filter(c => c.status === 'approved').length;
-              const pendingCount = userCheckins.filter(c => c.status === 'pending').length;
               const userTotalSalary = approvedCount * (user.salaryRate || 50000);
 
               return (
@@ -308,7 +337,7 @@ export default function AdminDashboard() {
                     <div>
                       <div className="flex items-center gap-2">
                         <h3 className="font-bold text-lg text-gray-900">{user.fullName}</h3>
-                        <span className="px-2.5 py-0.5 text-xs font-bold text-blue-700 bg-blue-100 rounded-full">
+                        <span className="px-2.5 py-0.5 text-xs font-bold text-blue-700 bg-blue-100 rounded-full border border-blue-200">
                           {user.department}
                         </span>
                       </div>
@@ -331,46 +360,29 @@ export default function AdminDashboard() {
                       )}
                     </div>
 
-                    {/* Salary Settings & Total */}
-                    <div className="flex items-center gap-4 bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
-                      {/* Rate per shift */}
+                    {/* Admin Edit Action & Salary Display */}
+                    <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-gray-200 shadow-2xs">
                       <div className="text-xs">
-                        <span className="text-gray-400 font-medium block">Mức lương / ca:</span>
-                        {editingSalaryUser === user.id ? (
-                          <div className="flex items-center gap-1.5 mt-1">
-                            <input
-                              type="number"
-                              className="w-24 px-2 py-1 text-xs border rounded-lg outline-none font-bold"
-                              value={editSalaryValue}
-                              onChange={(e) => setEditSalaryValue(e.target.value)}
-                            />
-                            <button onClick={() => saveSalary(user.id)} className="text-emerald-600 font-bold hover:underline">Lưu</button>
-                            <button onClick={() => setEditingSalaryUser(null)} className="text-gray-400 hover:underline">Hủy</button>
-                          </div>
-                        ) : (
-                          <div className="flex items-center gap-2 mt-1">
-                            <span className="font-bold text-gray-900">{(user.salaryRate || 50000).toLocaleString()} VND</span>
-                            <button 
-                              onClick={() => { setEditingSalaryUser(user.id); setEditSalaryValue((user.salaryRate || 50000).toString()); }}
-                              className="text-blue-600 font-medium hover:underline text-[11px]"
-                            >
-                              Sửa
-                            </button>
-                          </div>
-                        )}
+                        <span className="text-gray-400 font-medium block">Mức phụ cấp / ca:</span>
+                        <span className="font-bold text-emerald-700 text-sm">{(user.salaryRate || 50000).toLocaleString()} VND</span>
                       </div>
 
-                      {/* Total Earned */}
-                      <div className="text-xs border-l border-gray-200 pl-4">
+                      <div className="text-xs border-l border-gray-200 pl-3">
                         <span className="text-gray-400 font-medium block">Tổng nhận ({approvedCount} ca):</span>
-                        <span className="font-black text-emerald-600 text-sm">{userTotalSalary.toLocaleString()} VND</span>
+                        <span className="font-black text-blue-600 text-sm">{userTotalSalary.toLocaleString()} VND</span>
                       </div>
 
-                      {/* Remove TNV button */}
+                      <button
+                        onClick={() => setEditingUser(user)}
+                        className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold rounded-xl transition border border-blue-200"
+                      >
+                        ✏️ Sửa Bộ phận & Chi phí
+                      </button>
+
                       <button
                         onClick={() => handleDeleteUser(user.id, user.fullName)}
                         title="Xoá TNV"
-                        className="text-gray-300 hover:text-red-600 p-1 transition"
+                        className="text-gray-400 hover:text-red-600 p-1.5 transition"
                       >
                         🗑️
                       </button>

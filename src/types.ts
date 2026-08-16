@@ -9,7 +9,7 @@ export interface User {
   facebookLink?: string;
   department: string;
   notes?: string;
-  salaryRate: number; // e.g. 50000 VND / shift
+  salaryRate: number; // VND / shift (Chỉ Admin mới có quyền sửa)
   createdAt: number;
   updatedAt: number;
 }
@@ -21,6 +21,7 @@ export interface Checkin {
   department: string;
   shiftName?: string; // e.g. "Ca Sáng (08:00 - 12:00)", "Ca Chiều (13:00 - 17:00)"
   status: 'pending' | 'approved';
+  qrCodeToken?: string;
   createdAt: number;
   updatedAt: number;
 }

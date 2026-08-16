@@ -191,12 +191,7 @@ export async function registerTNV(payload: {
         return newUser;
       }
     } catch (err: any) {
-      console.warn("Supabase auth signup failed/rate-limited, falling back to local registration:", err);
-      if (err.message && (err.message.includes('rate limit') || err.status === 429)) {
-        // Fallback to local storage mode
-      } else {
-        throw err;
-      }
+      console.warn("Supabase auth signup failed, falling back to local registration:", err);
     }
   }
 
@@ -285,7 +280,6 @@ export async function loginAdmin(passcode: string): Promise<User> {
     updatedAt: Date.now(),
   };
 
-  // Always store local admin session so Admin login never hits Supabase rate limits!
   setLocalSession(adminUser);
   return adminUser;
 }
@@ -309,7 +303,6 @@ export async function fetchAllUsers(): Promise<User[]> {
           updatedAt: d.updated_at,
         }));
         
-        // Merge cloud & local users without duplicates
         const map = new Map<string, User>();
         localUsers.forEach(u => map.set(u.id, u));
         cloudUsers.forEach(u => map.set(u.id, u));
@@ -372,7 +365,6 @@ export async function submitCheckin(user: User, shiftName?: string): Promise<Che
     updatedAt: Date.now(),
   };
 
-  // Always save to local first for instant responsiveness
   const checkins = getLocalCheckins();
   checkins.unshift(newCheckin);
   saveLocalCheckins(checkins);
@@ -392,6 +384,91 @@ export async function submitCheckin(user: User, shiftName?: string): Promise<Che
     }
   }
   return newCheckin;
+}
+
+// Admin updates ANY TNV field (Department, Salary rate, Name, Phone, Facebook, Notes)
+export async function updateUserProfileByAdmin(userId: string, data: Partial<User>): Promise<User> {
+  const users = getLocalUsers();
+  const user = users.find(u => u.id === userId);
+  if (user) {
+    if (data.fullName !== undefined) user.fullName = data.fullName;
+    if (data.email !== undefined) user.email = data.email;
+    if (data.phone !== undefined) user.phone = data.phone;
+    if (data.facebookLink !== undefined) user.facebookLink = data.facebookLink;
+    if (data.department !== undefined) user.department = data.department;
+    if (data.notes !== undefined) user.notes = data.notes;
+    if (data.salaryRate !== undefined) user.salaryRate = data.salaryRate;
+    user.updatedAt = Date.now();
+    saveLocalUsers(users);
+  }
+
+  if (isSupabaseConfigured()) {
+    try {
+      const updatePayload: any = { updated_at: Date.now() };
+      if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
+      if (data.phone !== undefined) updatePayload.phone = data.phone;
+      if (data.facebookLink !== undefined) updatePayload.facebook_link = data.facebookLink;
+      if (data.department !== undefined) updatePayload.department = data.department;
+      if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
+      await supabase.from('users').update(updatePayload).eq('id', userId);
+    } catch (e) {
+      console.warn("Supabase update profile error:", e);
+    }
+  }
+
+  return user || (data as User);
+}
+
+// QR Check-in processing (Accepts either Event QR or User QR)
+export async function processQRCheckin(qrToken: string, activeUser?: User): Promise<{ success: boolean; message: string; checkin?: Checkin }> {
+  try {
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(qrToken);
+    } catch {
+      // Plain text user ID or token
+      parsed = { type: 'user_qr', userId: qrToken };
+    }
+
+    const users = await fetchAllUsers();
+
+    // Case 1: Event QR scanned by TNV (type: 'event_qr')
+    if (parsed.type === 'event_qr' || parsed.shiftName) {
+      if (!activeUser) {
+        return { success: false, message: 'Vui lòng đăng nhập tài khoản TNV để quét QR điểm danh!' };
+      }
+      const shiftName = parsed.shiftName || 'Ca làm việc QR';
+      const checkin = await submitCheckin(activeUser, shiftName);
+      // Auto-approve QR check-ins!
+      await approveCheckinItem(checkin.id);
+      return { 
+        success: true, 
+        message: `Đã điểm danh & tự động duyệt ca "${shiftName}" thành công!`,
+        checkin: { ...checkin, status: 'approved' }
+      };
+    }
+
+    // Case 2: Admin scans TNV User QR (type: 'user_qr')
+    if (parsed.type === 'user_qr' || parsed.userId) {
+      const targetUserId = parsed.userId || qrToken;
+      const targetUser = users.find(u => u.id === targetUserId);
+      if (!targetUser) {
+        return { success: false, message: `Không tìm thấy thông tin TNV từ mã QR này (ID: ${targetUserId})` };
+      }
+      const checkin = await submitCheckin(targetUser, 'Điểm danh qua QR bởi Admin');
+      await approveCheckinItem(checkin.id);
+      return {
+        success: true,
+        message: `Đã quét QR & tự động duyệt điểm danh cho TNV ${targetUser.fullName} (${targetUser.department})!`,
+        checkin: { ...checkin, status: 'approved' }
+      };
+    }
+
+    return { success: false, message: 'Mã QR không đúng định dạng của hệ thống.' };
+  } catch (err: any) {
+    console.error("Lỗi xử lý QR checkin:", err);
+    return { success: false, message: err.message || 'Lỗi khi xử lý mã QR điểm danh.' };
+  }
 }
 
 export async function approveCheckinItem(checkinId: string): Promise<void> {
@@ -432,21 +509,7 @@ export async function bulkApproveCheckinsList(checkinIds: string[]): Promise<voi
 }
 
 export async function updateUserSalary(userId: string, salaryRate: number): Promise<void> {
-  const users = getLocalUsers();
-  const user = users.find(u => u.id === userId);
-  if (user) {
-    user.salaryRate = salaryRate;
-    user.updatedAt = Date.now();
-    saveLocalUsers(users);
-  }
-
-  if (isSupabaseConfigured()) {
-    try {
-      await supabase.from('users').update({ salary_rate: salaryRate, updated_at: Date.now() }).eq('id', userId);
-    } catch (e) {
-      console.warn("Supabase update salary error:", e);
-    }
-  }
+  return updateUserProfileByAdmin(userId, { salaryRate });
 }
 
 export async function removeUser(userId: string): Promise<void> {
