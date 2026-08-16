@@ -105,10 +105,13 @@ export default function AdminDashboard() {
         const hasMatchingCheckin = checkins.some(c => 
           c.userId === u.id && (
             c.eventId === selectedEventFilter || 
-            (targetEvtName && c.eventName === targetEvtName)
+            (targetEvtName && c.eventName === targetEvtName) ||
+            (!c.eventId && !c.eventName && (eventsList.length === 1 || targetEvt?.status === 'active'))
           )
         );
-        const hasMatchingUserEvent = u.eventId === selectedEventFilter || (targetEvtName && u.eventName === targetEvtName);
+        const hasMatchingUserEvent = u.eventId === selectedEventFilter || 
+          (targetEvtName && u.eventName === targetEvtName) ||
+          (!u.eventId && !u.eventName && (eventsList.length === 1 || targetEvt?.status === 'active'));
 
         matchesEvent = hasMatchingCheckin || hasMatchingUserEvent;
       }
@@ -464,18 +467,24 @@ export default function AdminDashboard() {
                 {eventsList.map(evt => {
                   const evtUsers = users.filter(u => {
                     const hasMatchingCheckin = checkins.some(c => 
-                      c.userId === u.id && (c.eventId === evt.id || c.eventName === evt.name)
+                      c.userId === u.id && (
+                        c.eventId === evt.id || 
+                        c.eventName === evt.name || 
+                        (!c.eventId && !c.eventName && (eventsList.length === 1 || evt.status === 'active'))
+                      )
                     );
-                    const hasMatchingUserEvent = u.eventId === evt.id || u.eventName === evt.name;
+                    const hasMatchingUserEvent = u.eventId === evt.id || 
+                      u.eventName === evt.name || 
+                      (!u.eventId && !u.eventName && (eventsList.length === 1 || evt.status === 'active'));
                     return hasMatchingCheckin || hasMatchingUserEvent;
                   });
 
                   const pendingCount = checkins.filter(c => 
-                    (c.eventId === evt.id || c.eventName === evt.name) && c.status === 'pending'
+                    ((c.eventId === evt.id || c.eventName === evt.name) || (!c.eventId && !c.eventName && (eventsList.length === 1 || evt.status === 'active'))) && c.status === 'pending'
                   ).length;
 
                   const approvedCount = checkins.filter(c => 
-                    (c.eventId === evt.id || c.eventName === evt.name) && c.status === 'approved'
+                    ((c.eventId === evt.id || c.eventName === evt.name) || (!c.eventId && !c.eventName && (eventsList.length === 1 || evt.status === 'active'))) && c.status === 'approved'
                   ).length;
 
                   return (
