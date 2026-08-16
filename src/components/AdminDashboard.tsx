@@ -24,7 +24,7 @@ import AdminDepartmentModal from './AdminDepartmentModal';
 import AdminSettingsModal from './AdminSettingsModal';
 import AdminEventModal from './AdminEventModal';
 import AdminUserDetailModal from './AdminUserDetailModal';
-import { getEventsList } from '../services/dataService';
+import { getEventsList, fetchEventsListAsync } from '../services/dataService';
 
 export default function AdminDashboard() {
   const { logout, isLocalStorageMode } = useAuth();
@@ -65,7 +65,9 @@ export default function AdminDashboard() {
 
       setDepartmentsList(getDepartmentsList());
       setAdminSettings(getAdminEmailSettings());
-      setEventsList(getEventsList());
+      
+      const evts = await fetchEventsListAsync();
+      setEventsList(evts);
     } catch (err) {
       console.error("Lỗi lấy dữ liệu Admin:", err);
     } finally {

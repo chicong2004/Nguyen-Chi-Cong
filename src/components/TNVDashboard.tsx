@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate, getActiveEventsList } from '../services/dataService';
+import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate, getActiveEventsList, fetchActiveEventsListAsync } from '../services/dataService';
 import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
 import QRScannerModal from './QRScannerModal';
@@ -36,9 +36,9 @@ export default function TNVDashboard() {
         setCurrentUserProfile(updatedProfile);
       }
 
-      // 2. Sync latest departments & active events list from Admin
+      // 2. Sync latest departments & active events list directly from Supabase Cloud
       setDepartmentsList(getDepartmentsList());
-      const evts = getActiveEventsList();
+      const evts = await fetchActiveEventsListAsync();
       setEventsList(evts);
       setSelectedEventId(prev => {
         if (evts.length > 0 && (!prev || !evts.some(e => e.id === prev))) {

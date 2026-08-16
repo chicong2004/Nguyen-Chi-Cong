@@ -41,23 +41,57 @@ export function getActiveEventsList(): EventItem[] {
   return getEventsList().filter(e => e.status === 'active');
 }
 
-export function saveEventsList(events: EventItem[]): void {
+export async function fetchEventsListAsync(): Promise<EventItem[]> {
+  if (isSupabaseActive()) {
+    try {
+      const { data, error } = await supabase.from('users').select('*').eq('id', SYSTEM_DEPTS_ID).maybeSingle();
+      if (!error && data && data.department) {
+        try {
+          const parsed = JSON.parse(data.department);
+          if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.events)) {
+            localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(parsed.events));
+            return parsed.events;
+          }
+        } catch {}
+      }
+    } catch (e) {
+      console.warn("Lỗi fetch events từ Supabase:", e);
+    }
+  }
+  return getEventsList();
+}
+
+export async function fetchActiveEventsListAsync(): Promise<EventItem[]> {
+  const evts = await fetchEventsListAsync();
+  return evts.filter(e => e.status === 'active');
+}
+
+export async function saveEventsListAsync(events: EventItem[]): Promise<void> {
   localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(events));
   if (isSupabaseActive()) {
     const deps = getDepartmentsList();
     const rates = getDepartmentRates();
     const payloadStr = JSON.stringify({ deps, rates, events });
-    supabase.from('users').upsert({
-      id: SYSTEM_DEPTS_ID,
-      role: 'admin',
-      full_name: '__SYSTEM_DEPARTMENTS__',
-      phone: '0000000000',
-      department: payloadStr,
-      salary_rate: 0,
-      created_at: Date.now(),
-      updated_at: Date.now(),
-    }).then(() => {}).catch(err => console.warn("Supabase events sync notice:", err));
+    try {
+      const { error } = await supabase.from('users').upsert({
+        id: SYSTEM_DEPTS_ID,
+        role: 'admin',
+        full_name: '__SYSTEM_DEPARTMENTS__',
+        phone: '0000000000',
+        department: payloadStr,
+        salary_rate: 0,
+        created_at: Date.now(),
+        updated_at: Date.now(),
+      });
+      if (error) console.error("Lỗi upsert events Supabase:", error);
+    } catch (err) {
+      console.warn("Supabase events sync notice:", err);
+    }
   }
+}
+
+export function saveEventsList(events: EventItem[]): void {
+  saveEventsListAsync(events).catch(err => console.error("Error saving events:", err));
 }
 
 export function generateUUID(): string {

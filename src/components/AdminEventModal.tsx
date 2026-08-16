@@ -1,6 +1,6 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { EventItem } from '../types';
-import { getEventsList, saveEventsList, generateUUID } from '../services/dataService';
+import { getEventsList, fetchEventsListAsync, saveEventsListAsync, generateUUID } from '../services/dataService';
 
 interface AdminEventModalProps {
   isOpen: boolean;
@@ -15,9 +15,15 @@ export default function AdminEventModal({ isOpen, onClose, onEventsUpdated }: Ad
   const [endDate, setEndDate] = useState('');
   const [location, setLocation] = useState('');
 
+  useEffect(() => {
+    if (isOpen) {
+      fetchEventsListAsync().then(evts => setEvents(evts));
+    }
+  }, [isOpen]);
+
   if (!isOpen) return null;
 
-  const handleAddEvent = (e: React.FormEvent) => {
+  const handleAddEvent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!name.trim()) return;
 
@@ -34,7 +40,7 @@ export default function AdminEventModal({ isOpen, onClose, onEventsUpdated }: Ad
 
     const updated = [newEvt, ...events];
     setEvents(updated);
-    saveEventsList(updated);
+    await saveEventsListAsync(updated);
     onEventsUpdated();
 
     setName('');
@@ -43,7 +49,7 @@ export default function AdminEventModal({ isOpen, onClose, onEventsUpdated }: Ad
     setLocation('');
   };
 
-  const handleToggleStatus = (id: string) => {
+  const handleToggleStatus = async (id: string) => {
     const updated = events.map(e => {
       if (e.id === id) {
         return {
@@ -55,15 +61,15 @@ export default function AdminEventModal({ isOpen, onClose, onEventsUpdated }: Ad
       return e;
     });
     setEvents(updated);
-    saveEventsList(updated);
+    await saveEventsListAsync(updated);
     onEventsUpdated();
   };
 
-  const handleDeleteEvent = (id: string, evtName: string) => {
+  const handleDeleteEvent = async (id: string, evtName: string) => {
     if (confirm(`Bạn có chắc chắn muốn xoá sự kiện "${evtName}"?`)) {
       const updated = events.filter(e => e.id !== id);
       setEvents(updated);
-      saveEventsList(updated);
+      await saveEventsListAsync(updated);
       onEventsUpdated();
     }
   };
