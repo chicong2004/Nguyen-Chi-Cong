@@ -64,14 +64,20 @@ export default function TNVDashboard() {
     const deps = getDepartmentsList();
     setDepartmentsList(deps);
 
-    const evts = getActiveEventsList();
-    setEventsList(evts);
-    if (evts.length > 0 && !selectedEventId) {
-      setSelectedEventId(evts[0].id);
-    }
+    const syncEventsAndDeps = async () => {
+      const activeEvts = await fetchActiveEventsListAsync();
+      setEventsList(activeEvts);
+      if (activeEvts.length > 0 && !selectedEventId) {
+        setSelectedEventId(prev => (prev && activeEvts.some(e => e.id === prev) ? prev : activeEvts[0].id));
+      }
+    };
+    syncEventsAndDeps();
 
-    // Auto refresh every 10 seconds to sync Admin salary updates & approval statuses in real-time!
-    const timer = setInterval(loadUserData, 10000);
+    // Auto refresh every 5 seconds to sync Admin salary updates, events & approval statuses in real-time!
+    const timer = setInterval(() => {
+      loadUserData();
+      syncEventsAndDeps();
+    }, 5000);
     return () => clearInterval(timer);
   }, [userProfile?.id]);
 

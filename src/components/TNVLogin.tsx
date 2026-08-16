@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { registerTNV, loginTNV, getDepartmentsList, getDepartmentRate, fetchAllUsers } from '../services/dataService';
+import { registerTNV, loginTNV, getDepartmentsList, getDepartmentRate, fetchAllUsers, fetchActiveEventsListAsync, getActiveEventsList } from '../services/dataService';
+import { EventItem } from '../types';
 
 interface TNVLoginProps {
   initialIsLogin?: boolean;
@@ -10,11 +11,13 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const { setCurrentSessionUser, isLocalStorageMode } = useAuth();
   const [isLogin, setIsLogin] = useState(initialIsLogin);
   const [departments, setDepartments] = useState<string[]>([]);
+  const [events, setEvents] = useState<EventItem[]>([]);
+  const [selectedEventId, setSelectedEventId] = useState<string>('');
 
   useEffect(() => {
     setIsLogin(initialIsLogin);
 
-    const syncDepartments = async () => {
+    const syncData = async () => {
       try {
         await fetchAllUsers();
       } catch (err) {
@@ -25,10 +28,16 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
       if (deps.length > 0) {
         setDepartment(prev => (deps.includes(prev) ? prev : deps[0]));
       }
+
+      const activeEvents = await fetchActiveEventsListAsync();
+      setEvents(activeEvents);
+      if (activeEvents.length > 0) {
+        setSelectedEventId(prev => (prev && activeEvents.some(e => e.id === prev) ? prev : activeEvents[0].id));
+      }
     };
 
-    syncDepartments();
-    const interval = setInterval(syncDepartments, 3000);
+    syncData();
+    const interval = setInterval(syncData, 3000);
     return () => clearInterval(interval);
   }, [initialIsLogin]);
 
@@ -59,12 +68,15 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
         if (!fullName.trim() || !phone.trim() || !email.trim()) {
           throw new Error('Vui lòng điền đầy đủ các thông tin bắt buộc (Họ tên, SĐT, Email)');
         }
+        const chosenEvt = events.find(e => e.id === selectedEventId);
         const newUser = await registerTNV({
           fullName,
           email,
           phone,
           facebookLink,
           department,
+          eventId: selectedEventId,
+          eventName: chosenEvt?.name || '',
           notes,
           password,
         });
@@ -119,6 +131,29 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
                 placeholder="VD: Nguyễn Văn An"
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
               />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-purple-900 mb-1 flex items-center justify-between">
+                <span>🎉 Chọn Sự Kiện Tham Gia <span className="text-red-500">*</span></span>
+                <span className="text-[10px] text-purple-600 font-normal">Đồng bộ tự động từ Admin</span>
+              </label>
+              <select
+                value={selectedEventId}
+                onChange={(e) => setSelectedEventId(e.target.value)}
+                required
+                className="w-full px-4 py-2.5 border-2 border-purple-200 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none transition bg-purple-50/50 text-xs font-extrabold text-purple-900 shadow-xs"
+              >
+                {events.length === 0 ? (
+                  <option value="">(Chưa có sự kiện nào mở đăng ký)</option>
+                ) : (
+                  events.map((evt) => (
+                    <option key={evt.id} value={evt.id}>
+                      🎉 {evt.name} ({evt.startDate} đến {evt.endDate})
+                    </option>
+                  ))
+                )}
+              </select>
             </div>
 
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">

@@ -395,27 +395,38 @@ export async function registerTNV(payload: {
   phone: string;
   facebookLink?: string;
   department: string;
+  eventId?: string;
+  eventName?: string;
   notes?: string;
   password?: string;
 }): Promise<User> {
   const cleanEmail = payload.email.trim().toLowerCase();
 
-  // Check local users for existing email
+  // Check local users for existing email registration for this event
   const users = getLocalUsers();
-  const existingLocal = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
-  if (existingLocal) {
-    throw new Error('⚠️ Email này đã được đăng ký tài khoản TNV trước đó! Mỗi email chỉ được tạo 1 tài khoản.');
+  const existingLocalForEvent = users.find(u => 
+    u.email.trim().toLowerCase() === cleanEmail && 
+    (payload.eventId ? u.eventId === payload.eventId : true)
+  );
+
+  if (existingLocalForEvent) {
+    const eventNameStr = payload.eventName ? ` sự kiện "${payload.eventName}"` : ' sự kiện này';
+    throw new Error(`⚠️ Email (${cleanEmail}) đã được đăng ký tham gia${eventNameStr} trước đó! Mỗi tài khoản chỉ được đăng ký 1 lần cho mỗi sự kiện.`);
   }
 
-  // Check Supabase Cloud for existing email
+  // Check Supabase Cloud for existing email registration for this event
   if (isSupabaseActive()) {
     try {
-      const { data } = await supabase.from('users').select('id, full_name').eq('email', cleanEmail);
-      if (data && data.length > 0 && data[0].full_name !== '__SYSTEM_DEPARTMENTS__') {
-        throw new Error('⚠️ Email này đã được đăng ký tài khoản TNV trên hệ thống! Vui lòng bấm "Đăng nhập" để đăng ký lịch ca làm & đổi bộ phận.');
+      const { data } = await supabase.from('users').select('id, full_name, event_id').eq('email', cleanEmail);
+      if (data && data.length > 0) {
+        const foundForEvent = data.find(d => d.full_name !== '__SYSTEM_DEPARTMENTS__' && (!payload.eventId || d.event_id === payload.eventId));
+        if (foundForEvent) {
+          const eventNameStr = payload.eventName ? ` sự kiện "${payload.eventName}"` : ' sự kiện này';
+          throw new Error(`⚠️ Email (${cleanEmail}) đã được đăng ký tham gia${eventNameStr} trên hệ thống! Vui lòng Đăng nhập để xem lịch ca làm.`);
+        }
       }
     } catch (err: any) {
-      if (err.message && err.message.includes('Đã được đăng ký')) {
+      if (err.message && (err.message.includes('đã được đăng ký') || err.message.includes('đã đăng ký'))) {
         throw err;
       }
     }
@@ -429,6 +440,8 @@ export async function registerTNV(payload: {
     phone: payload.phone,
     facebookLink: payload.facebookLink || '',
     department: payload.department,
+    eventId: payload.eventId || '',
+    eventName: payload.eventName || '',
     notes: payload.notes || '',
     salaryRate: getDepartmentRate(payload.department),
     createdAt: Date.now(),
@@ -452,6 +465,8 @@ export async function registerTNV(payload: {
         phone: newUser.phone,
         facebook_link: newUser.facebookLink,
         department: newUser.department,
+        event_id: newUser.eventId || null,
+        event_name: newUser.eventName || null,
         salary_rate: newUser.salaryRate,
         created_at: newUser.createdAt,
         updated_at: newUser.updatedAt,
@@ -659,6 +674,15 @@ export async function submitScheduleRegistration(
     try {
       await updateUserProfileByAdmin(user.id, { department: targetDepartment, salaryRate: deptRate });
     } catch {}
+  }
+
+  // 1 Account per Event Constraint: Each account can only register 1 shift for a specific event!
+  if (eventId) {
+    const existingCheckins = getLocalCheckins();
+    const duplicateForEvent = existingCheckins.find(c => c.userId === user.id && c.eventId === eventId);
+    if (duplicateForEvent) {
+      throw new Error(`⚠️ Bạn đã đăng ký ca làm việc cho sự kiện "${eventName || 'này'}" trước đó! Mỗi tài khoản chỉ được đăng ký 1 lần cho mỗi sự kiện.`);
+    }
   }
 
   const newSchedule: Checkin = {

@@ -19,6 +19,8 @@ export interface User {
   phone: string;
   facebookLink?: string;
   department: string;
+  eventId?: string;
+  eventName?: string;
   notes?: string;
   salaryRate: number; // VND / ca (Chỉ Admin mới có quyền sửa)
   createdAt: number;
