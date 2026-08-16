@@ -1,3 +1,5 @@
+import React, { useEffect, useState } from 'react';
+import { useAuth } from './AuthContext';
 import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate, getActiveEventsList } from '../services/dataService';
 import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
