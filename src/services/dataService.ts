@@ -90,19 +90,16 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
 
 export function getDepartmentsList(): string[] {
   const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
-  let customDeps: string[] = [];
   try {
     const raw = localStorage.getItem(CUSTOM_DEPARTMENTS_KEY);
-    if (raw) customDeps = JSON.parse(raw);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
   } catch {}
-
-  let userDeps: string[] = [];
-  try {
-    const users = getLocalUsers();
-    userDeps = users.map(u => u.department).filter(Boolean);
-  } catch {}
-
-  return Array.from(new Set([...defaultDeps, ...customDeps, ...userDeps]));
+  return defaultDeps;
 }
 
 export function saveDepartmentsList(deps: string[]) {
