@@ -29,14 +29,25 @@ export default function TNVDashboard() {
   const loadUserData = async () => {
     if (!userProfile?.id) return;
     try {
-      // 1. Fetch updated users to sync latest profile configured by Admin
+      // 1. Fetch updated users to sync latest profile, departments & events configured by Admin
       const allUsers = await fetchAllUsers();
       const updatedProfile = allUsers.find(u => u.id === userProfile.id);
       if (updatedProfile) {
         setCurrentUserProfile(updatedProfile);
       }
 
-      // 2. Fetch latest checkins/schedules
+      // 2. Sync latest departments & active events list from Admin
+      setDepartmentsList(getDepartmentsList());
+      const evts = getActiveEventsList();
+      setEventsList(evts);
+      setSelectedEventId(prev => {
+        if (evts.length > 0 && (!prev || !evts.some(e => e.id === prev))) {
+          return evts[0].id;
+        }
+        return prev;
+      });
+
+      // 3. Fetch latest checkins/schedules
       const data = await fetchCheckins(userProfile.id);
       setCheckins(data);
     } catch (e) {

@@ -43,7 +43,21 @@ export function getActiveEventsList(): EventItem[] {
 
 export function saveEventsList(events: EventItem[]): void {
   localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(events));
-  triggerCloudSync();
+  if (isSupabaseActive()) {
+    const deps = getDepartmentsList();
+    const rates = getDepartmentRates();
+    const payloadStr = JSON.stringify({ deps, rates, events });
+    supabase.from('users').upsert({
+      id: SYSTEM_DEPTS_ID,
+      role: 'admin',
+      full_name: '__SYSTEM_DEPARTMENTS__',
+      phone: '0000000000',
+      department: payloadStr,
+      salary_rate: 0,
+      created_at: Date.now(),
+      updated_at: Date.now(),
+    }).then(() => {}).catch(err => console.warn("Supabase events sync notice:", err));
+  }
 }
 
 export function generateUUID(): string {
@@ -208,7 +222,8 @@ export function saveDepartmentsAndRates(deps: string[], rates?: Record<string, n
   localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(currentRates));
 
   if (isSupabaseActive()) {
-    const payloadStr = JSON.stringify({ deps, rates: currentRates });
+    const events = getEventsList();
+    const payloadStr = JSON.stringify({ deps, rates: currentRates, events });
     supabase.from('users').upsert({
       id: SYSTEM_DEPTS_ID,
       role: 'admin',
@@ -471,6 +486,9 @@ export async function fetchAllUsers(): Promise<User[]> {
               }
               if (typeof parsed.rates === 'object' && parsed.rates !== null) {
                 localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(parsed.rates));
+              }
+              if (Array.isArray(parsed.events)) {
+                localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(parsed.events));
               }
             }
           } catch {}
