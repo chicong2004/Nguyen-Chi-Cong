@@ -420,7 +420,7 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     user.id = generateUUID();
   }
   try {
-    const { error } = await supabase.from('users').upsert({
+    const payload: any = {
       id: user.id,
       role: user.role || 'tnv',
       full_name: user.fullName,
@@ -433,22 +433,27 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
       salary_rate: user.salaryRate || 50000,
       created_at: user.createdAt || Date.now(),
       updated_at: user.updatedAt || Date.now(),
-    });
+    };
 
+    // 1. Try Upsert first
+    let { error } = await supabase.from('users').upsert(payload);
+
+    // 2. If Upsert fails (e.g. RLS policy missing UPDATE), try direct INSERT
     if (error) {
-      console.warn("Supabase upsert user notice, retrying base payload:", error.message);
-      await supabase.from('users').upsert({
-        id: user.id,
-        role: user.role || 'tnv',
-        full_name: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        facebook_link: user.facebookLink || '',
-        department: user.department,
-        salary_rate: user.salaryRate || 50000,
-        created_at: user.createdAt || Date.now(),
-        updated_at: user.updatedAt || Date.now(),
-      });
+      console.warn("Supabase user upsert notice, trying direct insert:", error.message);
+      const insertRes = await supabase.from('users').insert([payload]);
+      error = insertRes.error;
+    }
+
+    // 3. If direct INSERT fails (e.g. duplicate key), try base payload insert/update
+    if (error) {
+      console.warn("Supabase user insert notice, retrying base payload insert/update:", error.message);
+      delete payload.event_id;
+      delete payload.event_name;
+      const baseRes = await supabase.from('users').insert([payload]);
+      if (baseRes.error) {
+        await supabase.from('users').update(payload).eq('id', payload.id);
+      }
     }
   } catch (err) {
     console.warn("Supabase user sync error:", err);
@@ -480,14 +485,24 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
       updated_at: checkin.updatedAt || Date.now(),
     };
 
-    const { error } = await supabase.from('checkins').upsert(payload);
+    // 1. Try Upsert first
+    let { error } = await supabase.from('checkins').upsert(payload);
+
+    // 2. If Upsert fails (e.g. RLS policy missing UPDATE), try direct INSERT
     if (error) {
-      console.warn("Supabase checkin upsert notice, retrying base payload:", error.message);
+      console.warn("Supabase checkin upsert notice, trying direct insert:", error.message);
+      const insertRes = await supabase.from('checkins').insert([payload]);
+      error = insertRes.error;
+    }
+
+    // 3. If direct INSERT fails, try base payload insert/update
+    if (error) {
+      console.warn("Supabase checkin insert notice, trying base payload insert/update:", error.message);
       delete payload.event_id;
       delete payload.event_name;
-      const { error: err2 } = await supabase.from('checkins').upsert(payload);
-      if (err2) {
-        console.error("Supabase checkin upsert final error:", err2.message);
+      const baseRes = await supabase.from('checkins').insert([payload]);
+      if (baseRes.error) {
+        await supabase.from('checkins').update(payload).eq('id', payload.id);
       }
     }
   } catch (err) {
