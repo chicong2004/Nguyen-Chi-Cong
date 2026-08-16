@@ -825,9 +825,14 @@ export async function submitScheduleRegistration(
     } catch {}
   }
 
-  // Update existing shift if already registered for this event, or create a new shift
+  // Update existing shift if already registered for this exact date & shift, or create a new shift
   const existingCheckins = getLocalCheckins();
-  const existingShift = existingCheckins.find(c => c.userId === user.id && (eventId ? (c.eventId === eventId || c.eventName === eventName) : true));
+  const existingShift = existingCheckins.find(c => 
+    (c.userId === user.id || (c.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())) && 
+    c.workDate === workDate && 
+    c.shiftName === shiftName && 
+    (eventId ? (c.eventId === eventId || c.eventName === eventName) : true)
+  );
 
   if (existingShift) {
     existingShift.workDate = workDate;
