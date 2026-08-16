@@ -443,28 +443,41 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     salary_rate: user.salaryRate || 50000,
   };
 
+  let lastError: any = null;
+
   try {
     // 1. Primary: Direct Upsert
     const { error: err1 } = await supabase.from('users').upsert(cleanPayload);
     if (!err1) return;
+    lastError = err1;
 
     console.warn("User upsert notice, retrying direct insert:", err1.message);
 
     // 2. Fallback: Direct Insert
     const { error: err2 } = await supabase.from('users').insert([cleanPayload]);
     if (!err2) return;
+    lastError = err2;
 
-    console.warn("User insert notice, retrying update by email:", err2.message);
+    console.warn("User insert notice, retrying base insert:", err2.message);
 
-    // 3. Fallback: Update existing row by email
+    // 3. Fallback: Minimal payload insert
     delete cleanPayload.event_id;
     delete cleanPayload.event_name;
     const { error: err3 } = await supabase.from('users').insert([cleanPayload]);
-    if (err3) {
-      await supabase.from('users').update(cleanPayload).eq('email', user.email);
+    if (!err3) return;
+    lastError = err3;
+
+    const { error: err4 } = await supabase.from('users').update(cleanPayload).eq('email', user.email);
+    if (!err4) return;
+    lastError = err4;
+
+    if (lastError) {
+      console.error("LỖI SUPABASE USERS:", lastError);
+      throw new Error(`Supabase từ chối tài khoản (${user.fullName}): ${lastError.message || lastError}`);
     }
-  } catch (err) {
-    console.warn("Supabase user sync error:", err);
+  } catch (err: any) {
+    console.error("LỖI ĐỒNG BỘ SUPABASE USERS:", err);
+    throw err;
   }
 }
 
@@ -492,16 +505,20 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
     admin_note: checkin.adminNote || '',
   };
 
+  let lastError: any = null;
+
   try {
     // 1. Primary: Direct Upsert
     const { error: err1 } = await supabase.from('checkins').upsert(cleanPayload);
     if (!err1) return;
+    lastError = err1;
 
     console.warn("Checkin upsert notice, retrying direct insert:", err1.message);
 
     // 2. Fallback: Direct Insert
     const { error: err2 } = await supabase.from('checkins').insert([cleanPayload]);
     if (!err2) return;
+    lastError = err2;
 
     console.warn("Checkin insert notice, retrying base insert:", err2.message);
 
@@ -509,11 +526,20 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
     delete cleanPayload.event_id;
     delete cleanPayload.event_name;
     const { error: err3 } = await supabase.from('checkins').insert([cleanPayload]);
-    if (err3) {
-      await supabase.from('checkins').update(cleanPayload).eq('id', checkin.id);
+    if (!err3) return;
+    lastError = err3;
+
+    const { error: err4 } = await supabase.from('checkins').update(cleanPayload).eq('id', checkin.id);
+    if (!err4) return;
+    lastError = err4;
+
+    if (lastError) {
+      console.error("LỖI SUPABASE CHECKINS:", lastError);
+      throw new Error(`Supabase từ chối ca làm (${checkin.shiftName}): ${lastError.message || lastError}`);
     }
-  } catch (err) {
-    console.warn("Supabase checkin sync error:", err);
+  } catch (err: any) {
+    console.error("LỖI ĐỒNG BỘ SUPABASE CHECKINS:", err);
+    throw err;
   }
 }
 
