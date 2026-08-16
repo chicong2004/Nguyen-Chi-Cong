@@ -389,6 +389,78 @@ async function triggerCloudSync() {
 }
 
 // Service Methods - Universal Cross-Device Cloud Sync
+export async function safeSupabaseUpsertUser(user: User): Promise<void> {
+  if (!isSupabaseActive() || !isValidUUID(user.id)) return;
+  try {
+    const { error } = await supabase.from('users').upsert({
+      id: user.id,
+      role: user.role,
+      full_name: user.fullName,
+      email: user.email,
+      phone: user.phone,
+      facebook_link: user.facebookLink || '',
+      department: user.department,
+      event_id: user.eventId || null,
+      event_name: user.eventName || null,
+      salary_rate: user.salaryRate,
+      created_at: user.createdAt,
+      updated_at: user.updatedAt,
+    });
+
+    if (error) {
+      console.warn("Supabase upsert user notice, retrying base payload:", error.message);
+      await supabase.from('users').upsert({
+        id: user.id,
+        role: user.role,
+        full_name: user.fullName,
+        email: user.email,
+        phone: user.phone,
+        facebook_link: user.facebookLink || '',
+        department: user.department,
+        salary_rate: user.salaryRate,
+        created_at: user.createdAt,
+        updated_at: user.updatedAt,
+      });
+    }
+  } catch (err) {
+    console.warn("Supabase user sync error:", err);
+  }
+}
+
+export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void> {
+  if (!isSupabaseActive() || !isValidUUID(checkin.id)) return;
+  try {
+    const payload: any = {
+      id: checkin.id,
+      user_id: checkin.userId,
+      full_name: checkin.fullName,
+      department: checkin.department,
+      event_id: checkin.eventId || null,
+      event_name: checkin.eventName || null,
+      work_date: checkin.workDate || format(new Date(), 'yyyy-MM-dd'),
+      shift_name: checkin.shiftName || 'Ca làm việc',
+      ot_hours: checkin.otHours || 0,
+      status: checkin.status,
+      notes: checkin.adminNote || '',
+      admin_note: checkin.adminNote || '',
+      checkin_time: checkin.checkinTime || null,
+      checkout_time: checkin.checkoutTime || null,
+      created_at: checkin.createdAt,
+      updated_at: checkin.updatedAt,
+    };
+
+    const { error } = await supabase.from('checkins').upsert(payload);
+    if (error) {
+      console.warn("Supabase checkin upsert notice, retrying base payload:", error.message);
+      delete payload.event_id;
+      delete payload.event_name;
+      await supabase.from('checkins').upsert(payload);
+    }
+  } catch (err) {
+    console.warn("Supabase checkin sync error:", err);
+  }
+}
+
 export async function registerTNV(payload: {
   fullName: string;
   email: string;
@@ -463,27 +535,7 @@ export async function registerTNV(payload: {
 
   // Sync globally to cloud KV & Supabase
   await triggerCloudSync();
-
-  if (isSupabaseActive()) {
-    try {
-      await supabase.from('users').upsert({
-        id: newUser.id,
-        role: newUser.role,
-        full_name: newUser.fullName,
-        email: newUser.email,
-        phone: newUser.phone,
-        facebook_link: newUser.facebookLink,
-        department: newUser.department,
-        event_id: newUser.eventId || null,
-        event_name: newUser.eventName || null,
-        salary_rate: newUser.salaryRate,
-        created_at: newUser.createdAt,
-        updated_at: newUser.updatedAt,
-      });
-    } catch (err: any) {
-      console.warn("Cloud sync registration notice:", err);
-    }
-  }
+  await safeSupabaseUpsertUser(newUser);
 
   return newUser;
 }
@@ -728,46 +780,9 @@ export async function submitScheduleRegistration(
   saveLocalCheckins(checkins);
 
   await triggerCloudSync();
+  await safeSupabaseUpsertUser(user);
+  await safeSupabaseUpsertCheckin(newSchedule);
 
-  if (isSupabaseActive() && isValidUUID(user.id)) {
-    try {
-      // First ensure user exists in Supabase users table with chosen department & rate
-      await supabase.from('users').upsert({
-        id: user.id,
-        role: user.role,
-        full_name: user.fullName,
-        email: user.email,
-        phone: user.phone,
-        facebook_link: user.facebookLink || '',
-        department: chosenDepartment,
-        event_id: eventId || null,
-        event_name: eventName || null,
-        salary_rate: deptRate,
-        created_at: user.createdAt,
-        updated_at: Date.now(),
-      });
-
-      // Insert full checkin payload
-      await supabase.from('checkins').insert({
-        id: newSchedule.id,
-        user_id: user.id,
-        full_name: user.fullName,
-        department: chosenDepartment,
-        event_id: eventId || null,
-        event_name: eventName || null,
-        work_date: workDate,
-        shift_name: shiftName,
-        ot_hours: otHours,
-        status: 'pending',
-        notes: notes || '',
-        admin_note: notes || '',
-        created_at: newSchedule.createdAt,
-        updated_at: newSchedule.updatedAt,
-      });
-    } catch (err) {
-      console.warn("Supabase schedule insert notice:", err);
-    }
-  }
   return newSchedule;
 }
 
@@ -852,26 +867,7 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         }
         saveLocalCheckins(allCheckins);
 
-        // Save Supabase via UPSERT
-        if (isSupabaseActive() && isValidUUID(openShift.id)) {
-          await supabase.from('checkins').upsert({
-            id: openShift.id,
-            user_id: activeUser.id,
-            full_name: activeUser.fullName,
-            department: openShift.department || activeUser.department,
-            event_id: openShift.eventId || null,
-            event_name: openShift.eventName || null,
-            work_date: openShift.workDate || workDate,
-            shift_name: openShift.shiftName || 'Ca làm việc',
-            ot_hours: openShift.otHours || 0,
-            status: 'approved',
-            checkin_time: openShift.checkinTime,
-            checkout_time: openShift.checkoutTime,
-            created_at: openShift.createdAt || now,
-            updated_at: now,
-          });
-        }
-
+        await safeSupabaseUpsertCheckin(openShift);
         await approveCheckinItem(openShift.id);
 
         return {
@@ -938,28 +934,7 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       }
       saveLocalCheckins(allCheckins);
 
-      // Save Supabase via UPSERT
-      if (isSupabaseActive() && isValidUUID(checkin.id)) {
-        await supabase.from('checkins').upsert({
-          id: checkin.id,
-          user_id: activeUser.id,
-          full_name: activeUser.fullName,
-          department: checkin.department || activeUser.department,
-          event_id: checkin.eventId || null,
-          event_name: checkin.eventName || null,
-          work_date: checkin.workDate || workDate,
-          shift_name: checkin.shiftName || 'Ca làm việc',
-          ot_hours: checkin.otHours || 0,
-          status: 'pending',
-          notes: checkin.adminNote || '',
-          admin_note: checkin.adminNote || '',
-          checkin_time: checkin.checkinTime,
-          checkout_time: checkin.checkoutTime || null,
-          created_at: checkin.createdAt || now,
-          updated_at: now,
-        });
-      }
-
+      await safeSupabaseUpsertCheckin(checkin);
       await triggerCloudSync();
 
       return {
