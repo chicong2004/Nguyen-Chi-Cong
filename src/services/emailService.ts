@@ -1,3 +1,5 @@
+import { safeSupabaseUpsertUser } from './dataService';
+
 const ADMIN_EMAIL_KEY = 'app_admin_email_settings_v1';
 
 export interface AdminEmailSettings {
@@ -18,6 +20,17 @@ export function getAdminEmailSettings(): AdminEmailSettings {
 
 export function saveAdminEmailSettings(settings: AdminEmailSettings) {
   localStorage.setItem(ADMIN_EMAIL_KEY, JSON.stringify(settings));
+  safeSupabaseUpsertUser({
+    id: '00000000-0000-4000-8000-000000000000',
+    role: 'admin',
+    fullName: settings.adminName || 'Quản trị viên Hệ thống',
+    email: settings.senderEmail || 'chicong092004@gmail.com',
+    phone: '0900000000',
+    department: 'Ban Điều Hành',
+    salaryRate: 0,
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  }).catch(() => {});
 }
 
 export async function sendApprovalEmailNotification(payload: {

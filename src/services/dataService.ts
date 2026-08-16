@@ -190,17 +190,18 @@ export async function saveEventsListAsync(events: EventItem[]): Promise<void> {
     const rates = getDepartmentRates();
     const payloadStr = JSON.stringify({ deps, rates, events });
     try {
-      const { error } = await supabase.from('users').upsert({
+      const cleanPayload = {
         id: SYSTEM_DEPTS_ID,
         role: 'admin',
         full_name: '__SYSTEM_DEPARTMENTS__',
         phone: '0000000000',
         department: payloadStr,
         salary_rate: 0,
-        created_at: Date.now(),
-        updated_at: Date.now(),
-      });
-      if (error) console.error("Lỗi upsert events Supabase:", error);
+      };
+      const { error } = await supabase.from('users').upsert(cleanPayload);
+      if (error) {
+        await supabase.from('users').insert([cleanPayload]);
+      }
     } catch (err) {
       console.warn("Supabase events sync notice:", err);
     }
@@ -294,16 +295,17 @@ export function saveDepartmentsAndRates(deps: string[], rates?: Record<string, n
   if (isSupabaseActive()) {
     const events = getEventsList();
     const payloadStr = JSON.stringify({ deps, rates: currentRates, events });
-    supabase.from('users').upsert({
+    const cleanPayload = {
       id: SYSTEM_DEPTS_ID,
       role: 'admin',
       full_name: '__SYSTEM_DEPARTMENTS__',
       phone: '0000000000',
       department: payloadStr,
       salary_rate: 0,
-      created_at: Date.now(),
-      updated_at: Date.now(),
-    }).then(() => {}).catch(err => console.warn("Supabase depts sync notice:", err));
+    };
+    supabase.from('users').upsert(cleanPayload).then(({ error }) => {
+      if (error) supabase.from('users').insert([cleanPayload]);
+    }).catch(err => console.warn("Supabase depts sync notice:", err));
   }
 }
 
@@ -675,7 +677,16 @@ export async function fetchAllUsers(): Promise<User[]> {
           } catch {}
         }
 
-        // 2. Filter out system config row from volunteer user list
+        // 2. Process Admin email settings sync across browsers
+        const adminRec = data.find(d => d.id === '00000000-0000-4000-8000-000000000000' || (d.role === 'admin' && d.id !== SYSTEM_DEPTS_ID));
+        if (adminRec && adminRec.full_name && adminRec.full_name !== '__SYSTEM_DEPARTMENTS__') {
+          localStorage.setItem('app_admin_email_settings_v1', JSON.stringify({
+            senderEmail: adminRec.email || 'chicong092004@gmail.com',
+            adminName: adminRec.full_name,
+          }));
+        }
+
+        // 3. Filter out system config row from volunteer user list
         const userRecords = data.filter(d => d.id !== SYSTEM_DEPTS_ID && d.full_name !== '__SYSTEM_DEPARTMENTS__');
 
         if (userRecords.length > 0) {
