@@ -6,7 +6,6 @@ const LOCAL_CHECKINS_KEY = 'app_checkins_data_v1';
 const LOCAL_SESSION_KEY = 'app_session_user_v1';
 const STORAGE_MODE_KEY = 'app_storage_mode_preference';
 
-// Helper to generate valid PostgreSQL-compatible UUIDs (resolves 400 Bad Request errors)
 export function generateUUID(): string {
   if (typeof crypto !== 'undefined' && crypto.randomUUID) {
     return crypto.randomUUID();
@@ -73,6 +72,9 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     department: 'Hậu cần',
     shiftName: 'Ca Sáng (08:00 - 12:00)',
     status: 'approved',
+    checkinTime: Date.now() - 86400000 * 2,
+    checkoutTime: Date.now() - 86400000 * 2 + 14400000,
+    type: 'full',
     createdAt: Date.now() - 86400000 * 2,
     updatedAt: Date.now() - 86400000 * 2,
   },
@@ -83,6 +85,8 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     department: 'Hậu cần',
     shiftName: 'Ca Chiều (13:00 - 17:00)',
     status: 'pending',
+    checkinTime: Date.now() - 86400000,
+    type: 'checkin',
     createdAt: Date.now() - 86400000,
     updatedAt: Date.now() - 86400000,
   },
@@ -93,18 +97,20 @@ const INITIAL_MOCK_CHECKINS: Checkin[] = [
     department: 'Truyền thông',
     shiftName: 'Ca Tối (18:00 - 21:00)',
     status: 'approved',
+    checkinTime: Date.now() - 86400000,
+    checkoutTime: Date.now() - 86400000 + 10800000,
+    type: 'full',
     createdAt: Date.now() - 86400000,
     updatedAt: Date.now() - 86400000,
   }
 ];
 
-// Storage mode state management
 export function getStorageMode(): 'local' | 'cloud' {
   try {
     const saved = localStorage.getItem(STORAGE_MODE_KEY);
     if (saved === 'cloud' || saved === 'local') return saved;
   } catch {}
-  return 'local'; // Default to LocalStorage mode to prevent 400 & 429 errors!
+  return 'local';
 }
 
 export function setStorageMode(mode: 'local' | 'cloud') {
@@ -148,7 +154,15 @@ function getLocalCheckins(): Checkin[] {
       localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(INITIAL_MOCK_CHECKINS));
       return INITIAL_MOCK_CHECKINS;
     }
-    return JSON.parse(raw);
+    const checkins: Checkin[] = JSON.parse(raw);
+    const users = getLocalUsers();
+    const validUserIds = new Set(users.map(u => u.id));
+    // Filter out checkins of deleted users!
+    const cleanCheckins = checkins.filter(c => validUserIds.has(c.userId));
+    if (cleanCheckins.length !== checkins.length) {
+      saveLocalCheckins(cleanCheckins);
+    }
+    return cleanCheckins;
   } catch (e) {
     return INITIAL_MOCK_CHECKINS;
   }
@@ -175,7 +189,6 @@ function setLocalSession(user: User | null) {
   }
 }
 
-// Check UUID validity
 function isValidUUID(uuidStr: string): boolean {
   const regex = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
   return regex.test(uuidStr);
@@ -231,12 +244,10 @@ export async function registerTNV(payload: {
       }
     } catch (err: any) {
       console.warn("Supabase auth signup notice - switching to local storage mode:", err);
-      // Auto-fallback to local mode on rate-limit or error
       setStorageMode('local');
     }
   }
 
-  // LocalStorage mode
   const users = getLocalUsers();
   const existing = users.find(u => u.email.toLowerCase() === payload.email.toLowerCase());
   if (existing) {
@@ -359,9 +370,13 @@ export async function fetchAllUsers(): Promise<User[]> {
 
 export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
   const localCheckins = getLocalCheckins();
+  const users = await fetchAllUsers();
+  const validUserIds = new Set(users.map(u => u.id));
+
+  let cleanCheckins = localCheckins.filter(c => validUserIds.has(c.userId));
+
   if (isSupabaseActive()) {
     try {
-      // Only query Supabase if userId is valid UUID or not provided
       if (!userId || isValidUUID(userId)) {
         let query = supabase.from('checkins').select('*').order('created_at', { ascending: false });
         if (userId) {
@@ -369,22 +384,23 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
         }
         const { data } = await query;
         if (data && data.length > 0) {
-          const cloudCheckins: Checkin[] = data.map(d => ({
-            id: d.id,
-            userId: d.user_id,
-            fullName: d.full_name,
-            department: d.department,
-            shiftName: d.shift_name || 'Ca làm việc',
-            status: d.status,
-            createdAt: d.created_at,
-            updatedAt: d.updated_at,
-          }));
+          const cloudCheckins: Checkin[] = data
+            .filter(d => validUserIds.has(d.user_id))
+            .map(d => ({
+              id: d.id,
+              userId: d.user_id,
+              fullName: d.full_name,
+              department: d.department,
+              shiftName: d.shift_name || 'Ca làm việc',
+              status: d.status,
+              createdAt: d.created_at,
+              updatedAt: d.updated_at,
+            }));
 
           const map = new Map<string, Checkin>();
-          localCheckins.forEach(c => map.set(c.id, c));
+          cleanCheckins.forEach(c => map.set(c.id, c));
           cloudCheckins.forEach(c => map.set(c.id, c));
-          const combined = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
-          return userId ? combined.filter(c => c.userId === userId) : combined;
+          cleanCheckins = Array.from(map.values()).sort((a, b) => b.createdAt - a.createdAt);
         }
       }
     } catch (err) {
@@ -393,9 +409,9 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
   }
 
   if (userId) {
-    return localCheckins.filter(c => c.userId === userId).sort((a, b) => b.createdAt - a.createdAt);
+    return cleanCheckins.filter(c => c.userId === userId).sort((a, b) => b.createdAt - a.createdAt);
   }
-  return localCheckins.sort((a, b) => b.createdAt - a.createdAt);
+  return cleanCheckins.sort((a, b) => b.createdAt - a.createdAt);
 }
 
 export async function submitCheckin(user: User, shiftName?: string): Promise<Checkin> {
@@ -406,6 +422,8 @@ export async function submitCheckin(user: User, shiftName?: string): Promise<Che
     department: user.department,
     shiftName: shiftName || 'Ca làm việc tiêu chuẩn',
     status: 'pending',
+    checkinTime: Date.now(),
+    type: 'checkin',
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -432,7 +450,66 @@ export async function submitCheckin(user: User, shiftName?: string): Promise<Che
   return newCheckin;
 }
 
-// Admin updates ANY TNV field (Department, Salary rate, Name, Phone, Facebook, Notes)
+// Process TNV QR Scan (Daily Checkin / Checkout)
+export async function processQRCheckin(qrToken: string, activeUser?: User): Promise<{ success: boolean; message: string; checkin?: Checkin }> {
+  try {
+    let parsed: any = null;
+    try {
+      parsed = JSON.parse(qrToken);
+    } catch {
+      parsed = { type: 'event_checkin', shiftName: 'Ca làm việc QR' };
+    }
+
+    if (!activeUser) {
+      return { success: false, message: 'Vui lòng đăng nhập tài khoản TNV để quét QR điểm danh!' };
+    }
+
+    const shiftName = parsed.shiftName || 'Ca làm việc QR';
+    const actionType = parsed.type === 'event_checkout' ? 'checkout' : 'checkin';
+
+    const userCheckins = await fetchCheckins(activeUser.id);
+    const existingPending = userCheckins.find(c => c.status === 'pending' || !c.checkoutTime);
+
+    if (actionType === 'checkout') {
+      if (existingPending) {
+        existingPending.checkoutTime = Date.now();
+        existingPending.type = 'full';
+        existingPending.status = 'approved';
+        existingPending.updatedAt = Date.now();
+        await approveCheckinItem(existingPending.id);
+
+        return {
+          success: true,
+          message: `📍 CHECK-OUT THÀNH CÔNG! Đã hoàn thành và tự động duyệt ca "${existingPending.shiftName}".`,
+          checkin: existingPending,
+        };
+      } else {
+        const checkin = await submitCheckin(activeUser, shiftName);
+        checkin.checkoutTime = Date.now();
+        checkin.type = 'full';
+        checkin.status = 'approved';
+        await approveCheckinItem(checkin.id);
+        return {
+          success: true,
+          message: `📍 CHECK-OUT THÀNH CÔNG cho ca "${shiftName}".`,
+          checkin,
+        };
+      }
+    } else {
+      // Check-in action
+      const checkin = await submitCheckin(activeUser, shiftName);
+      return {
+        success: true,
+        message: `✅ CHECK-IN VÀO CA THÀNH CÔNG! Ca "${shiftName}" (Đã gửi điểm danh).`,
+        checkin,
+      };
+    }
+  } catch (err: any) {
+    console.error("Lỗi xử lý QR checkin:", err);
+    return { success: false, message: err.message || 'Lỗi khi xử lý mã QR điểm danh.' };
+  }
+}
+
 export async function updateUserProfileByAdmin(userId: string, data: Partial<User>): Promise<User> {
   const users = getLocalUsers();
   const user = users.find(u => u.id === userId);
@@ -446,6 +523,18 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     if (data.salaryRate !== undefined) user.salaryRate = data.salaryRate;
     user.updatedAt = Date.now();
     saveLocalUsers(users);
+  }
+
+  // Also update full_name in checkins for this user
+  if (data.fullName || data.department) {
+    const checkins = getLocalCheckins();
+    checkins.forEach(c => {
+      if (c.userId === userId) {
+        if (data.fullName) c.fullName = data.fullName;
+        if (data.department) c.department = data.department;
+      }
+    });
+    saveLocalCheckins(checkins);
   }
 
   if (isSupabaseActive() && isValidUUID(userId)) {
@@ -463,56 +552,6 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
   }
 
   return user || (data as User);
-}
-
-// QR Check-in processing (Accepts either Event QR or User QR)
-export async function processQRCheckin(qrToken: string, activeUser?: User): Promise<{ success: boolean; message: string; checkin?: Checkin }> {
-  try {
-    let parsed: any = null;
-    try {
-      parsed = JSON.parse(qrToken);
-    } catch {
-      parsed = { type: 'user_qr', userId: qrToken };
-    }
-
-    const users = await fetchAllUsers();
-
-    // Case 1: Event QR scanned by TNV (type: 'event_qr')
-    if (parsed.type === 'event_qr' || parsed.shiftName) {
-      if (!activeUser) {
-        return { success: false, message: 'Vui lòng đăng nhập tài khoản TNV để quét QR điểm danh!' };
-      }
-      const shiftName = parsed.shiftName || 'Ca làm việc QR';
-      const checkin = await submitCheckin(activeUser, shiftName);
-      await approveCheckinItem(checkin.id);
-      return { 
-        success: true, 
-        message: `Đã điểm danh & tự động duyệt ca "${shiftName}" thành công!`,
-        checkin: { ...checkin, status: 'approved' }
-      };
-    }
-
-    // Case 2: Admin scans TNV User QR (type: 'user_qr')
-    if (parsed.type === 'user_qr' || parsed.userId) {
-      const targetUserId = parsed.userId || qrToken;
-      const targetUser = users.find(u => u.id === targetUserId);
-      if (!targetUser) {
-        return { success: false, message: `Không tìm thấy thông tin TNV từ mã QR này (ID: ${targetUserId})` };
-      }
-      const checkin = await submitCheckin(targetUser, 'Điểm danh qua QR bởi Admin');
-      await approveCheckinItem(checkin.id);
-      return {
-        success: true,
-        message: `Đã quét QR & tự động duyệt điểm danh cho TNV ${targetUser.fullName} (${targetUser.department})!`,
-        checkin: { ...checkin, status: 'approved' }
-      };
-    }
-
-    return { success: false, message: 'Mã QR không đúng định dạng của hệ thống.' };
-  } catch (err: any) {
-    console.error("Lỗi xử lý QR checkin:", err);
-    return { success: false, message: err.message || 'Lỗi khi xử lý mã QR điểm danh.' };
-  }
 }
 
 export async function approveCheckinItem(checkinId: string): Promise<void> {
@@ -560,12 +599,20 @@ export async function updateUserSalary(userId: string, salaryRate: number): Prom
 }
 
 export async function removeUser(userId: string): Promise<void> {
+  // 1. Delete user from local storage
   let users = getLocalUsers();
   users = users.filter(u => u.id !== userId);
   saveLocalUsers(users);
 
+  // 2. Delete ALL checkins associated with this user!
+  let checkins = getLocalCheckins();
+  checkins = checkins.filter(c => c.userId !== userId);
+  saveLocalCheckins(checkins);
+
+  // 3. Delete from Supabase if active
   if (isSupabaseActive() && isValidUUID(userId)) {
     try {
+      await supabase.from('checkins').delete().eq('user_id', userId);
       await supabase.from('users').delete().eq('id', userId);
     } catch (e) {
       console.warn("Supabase remove user notice:", e);

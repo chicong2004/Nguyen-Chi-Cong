@@ -7,6 +7,7 @@ import {
   approveCheckinItem, 
   bulkApproveCheckinsList, 
   removeUser,
+  updateUserProfileByAdmin,
   processQRCheckin
 } from '../services/dataService';
 import { format } from 'date-fns';
@@ -37,9 +38,14 @@ export default function AdminDashboard() {
   const loadAllData = async () => {
     try {
       const allUsers = await fetchAllUsers();
+      const tnvUsers = allUsers.filter(u => u.role === 'tnv');
+      setUsers(tnvUsers);
+
+      const validUserIds = new Set(tnvUsers.map(u => u.id));
       const allCheckins = await fetchCheckins();
-      setUsers(allUsers.filter(u => u.role === 'tnv'));
-      setCheckins(allCheckins);
+      // Filter out checkins of deleted users!
+      const validCheckins = allCheckins.filter(c => validUserIds.has(c.userId));
+      setCheckins(validCheckins);
     } catch (err) {
       console.error("Lỗi lấy dữ liệu Admin:", err);
     } finally {
@@ -52,8 +58,10 @@ export default function AdminDashboard() {
   }, []);
 
   const departments = useMemo(() => {
-    const deps = Array.from(new Set(users.map(u => u.department)));
-    return ['Tất cả', ...deps];
+    const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
+    const userDeps = users.map(u => u.department);
+    const combined = Array.from(new Set([...defaultDeps, ...userDeps]));
+    return ['Tất cả', ...combined];
   }, [users]);
 
   const filteredUsers = useMemo(() => {
@@ -67,7 +75,7 @@ export default function AdminDashboard() {
     });
   }, [users, activeTab, searchTerm]);
 
-  // Total statistics
+  // Metrics (Cleaned from deleted users)
   const totalApprovedCheckins = checkins.filter(c => c.status === 'approved').length;
   const totalPendingCheckins = checkins.filter(c => c.status === 'pending').length;
   const totalPayroll = users.reduce((sum, u) => {
@@ -97,15 +105,18 @@ export default function AdminDashboard() {
     }
   };
 
-  const toggleSelection = (id: string) => {
-    const newSet = new Set(selectedCheckins);
-    if (newSet.has(id)) newSet.delete(id);
-    else newSet.add(id);
-    setSelectedCheckins(newSet);
+  const handleDepartmentChangeInline = async (userId: string, newDept: string) => {
+    await updateUserProfileByAdmin(userId, { department: newDept });
+    await loadAllData();
+  };
+
+  const handleSalaryChangeInline = async (userId: string, newSalary: number) => {
+    await updateUserProfileByAdmin(userId, { salaryRate: newSalary });
+    await loadAllData();
   };
 
   const handleDeleteUser = async (uid: string, name: string) => {
-    if (confirm(`Bạn có chắc chắn muốn xoá TNV "${name}" khỏi hệ thống?`)) {
+    if (confirm(`Bạn có chắc chắn muốn xoá TNV "${name}" và toàn bộ dữ liệu ca làm liên quan?`)) {
       await removeUser(uid);
       await loadAllData();
     }
@@ -176,7 +187,7 @@ export default function AdminDashboard() {
         isOpen={isScannerOpen} 
         onClose={() => setIsScannerOpen(false)} 
         onScanSuccess={handleQRScanResult} 
-        title="📷 Admin Quét Mã QR Thẻ TNV" 
+        title="📷 Admin Quét Mã QR Quản Lý" 
       />
       <AdminEditUserModal 
         user={editingUser} 
@@ -185,7 +196,7 @@ export default function AdminDashboard() {
         onSaved={loadAllData} 
       />
 
-      {/* Top Bar */}
+      {/* Top Header */}
       <header className="bg-white border-b border-gray-200 px-6 py-4 sticky top-0 z-20 shadow-sm">
         <div className="max-w-7xl mx-auto flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
           <div>
@@ -201,7 +212,7 @@ export default function AdminDashboard() {
                 </span>
               )}
             </div>
-            <p className="text-xs text-gray-500 mt-0.5">Tạo QR điểm danh, chỉnh sửa đăng ký bộ phận & chi phí phụ cấp từng TNV</p>
+            <p className="text-xs text-gray-500 mt-0.5">Bảng quản lý dữ liệu TNV: Chỉnh sửa trực tiếp bộ phận, phụ cấp và tạo QR điểm danh</p>
           </div>
 
           <div className="flex flex-wrap gap-2">
@@ -209,14 +220,7 @@ export default function AdminDashboard() {
               onClick={() => setIsDailyQROpen(true)}
               className="px-3.5 py-2 bg-purple-600 hover:bg-purple-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
             >
-              📱 Tạo QR Ca Điểm Danh
-            </button>
-
-            <button
-              onClick={() => setIsScannerOpen(true)}
-              className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
-            >
-              📷 Quét QR Thẻ TNV
+              📱 Tạo QR Check-in & Check-out
             </button>
 
             <button
@@ -251,7 +255,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Metric Cards */}
+        {/* Corrected Metric Cards */}
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
           <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
             <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tổng TNV Đăng ký</span>
@@ -274,9 +278,8 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Search & Filter Header */}
+        {/* Search & Department Tabs */}
         <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4">
-          {/* Department Tabs */}
           <div className="flex space-x-1 overflow-x-auto w-full md:w-auto pb-1 scrollbar-hide">
             {departments.map(dep => (
               <button
@@ -293,8 +296,7 @@ export default function AdminDashboard() {
             ))}
           </div>
 
-          {/* Search Input */}
-          <div className="w-full md:w-72">
+          <div className="w-full md:w-80">
             <input
               type="text"
               value={searchTerm}
@@ -305,158 +307,159 @@ export default function AdminDashboard() {
           </div>
         </div>
 
-        {/* Bulk Approve Banner */}
-        {selectedCheckins.size > 0 && (
-          <div className="bg-blue-600 text-white p-4 rounded-2xl shadow-md flex items-center justify-between">
-            <span className="text-sm font-bold">Đã chọn {selectedCheckins.size} ca điểm danh chờ duyệt</span>
-            <button
-              onClick={handleBulkApprove}
-              className="px-4 py-2 bg-white text-blue-700 font-bold text-xs rounded-xl shadow hover:bg-blue-50 transition"
-            >
-              DUYỆT TẤT CẢ CA ĐÃ CHỌN
-            </button>
+        {/* Direct Data Table View */}
+        <div className="bg-white rounded-2xl border border-gray-200 shadow-sm overflow-hidden">
+          <div className="px-6 py-4 border-b border-gray-100 flex justify-between items-center">
+            <h3 className="font-bold text-gray-900 text-base flex items-center gap-2">
+              📋 Bảng Quản Lý Dữ Liệu TNV & Điểm Danh
+              <span className="text-xs font-normal bg-gray-100 text-gray-600 px-2.5 py-0.5 rounded-full">
+                {filteredUsers.length} kết quả
+              </span>
+            </h3>
+
+            {selectedCheckins.size > 0 && (
+              <button
+                onClick={handleBulkApprove}
+                className="px-3.5 py-1.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow transition"
+              >
+                Duyệt {selectedCheckins.size} ca đã chọn
+              </button>
+            )}
           </div>
-        )}
 
-        {/* Users List */}
-        {filteredUsers.length === 0 ? (
-          <div className="bg-white p-12 text-center rounded-2xl border border-gray-200 text-gray-500">
-            Không tìm thấy TNV nào phù hợp.
-          </div>
-        ) : (
-          <div className="space-y-6">
-            {filteredUsers.map(user => {
-              const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
-              const approvedCount = userCheckins.filter(c => c.status === 'approved').length;
-              const userTotalSalary = approvedCount * (user.salaryRate || 50000);
+          {filteredUsers.length === 0 ? (
+            <div className="p-12 text-center text-gray-400 text-sm">
+              Không tìm thấy TNV nào phù hợp trong hệ thống.
+            </div>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs text-left">
+                <thead className="text-[11px] text-gray-400 bg-gray-50 uppercase font-semibold border-b border-gray-100">
+                  <tr>
+                    <th className="px-4 py-3">Họ và Tên / Liên hệ</th>
+                    <th className="px-4 py-3">Bộ phận (Sửa trực tiếp)</th>
+                    <th className="px-4 py-3 text-right">Phụ cấp/ca (VND)</th>
+                    <th className="px-4 py-3 text-center">Ca đã duyệt</th>
+                    <th className="px-4 py-3 text-right">Tổng lương (VND)</th>
+                    <th className="px-4 py-3">Lịch sử ca làm việc</th>
+                    <th className="px-4 py-3 text-center">Thao tác</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {filteredUsers.map(user => {
+                    const userCheckins = checkins.filter(c => c.userId === user.id).sort((a, b) => b.createdAt - a.createdAt);
+                    const approvedCount = userCheckins.filter(c => c.status === 'approved').length;
+                    const pendingCheckins = userCheckins.filter(c => c.status === 'pending');
+                    const userTotalSalary = approvedCount * (user.salaryRate || 50000);
 
-              return (
-                <div key={user.id} className="bg-white rounded-2xl shadow-sm border border-gray-200 overflow-hidden">
-                  {/* User Profile Bar */}
-                  <div className="p-5 border-b border-gray-100 flex flex-col lg:flex-row justify-between items-start lg:items-center gap-4 bg-gray-50/60">
-                    <div>
-                      <div className="flex items-center gap-2">
-                        <h3 className="font-bold text-lg text-gray-900">{user.fullName}</h3>
-                        <span className="px-2.5 py-0.5 text-xs font-bold text-blue-700 bg-blue-100 rounded-full border border-blue-200">
-                          {user.department}
-                        </span>
-                      </div>
-                      
-                      <div className="flex flex-wrap gap-x-4 gap-y-1 text-xs text-gray-600 mt-1">
-                        <span>📧 {user.email}</span>
-                        <span>📱 {user.phone}</span>
-                        {user.facebookLink && (
-                          <a href={user.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 font-medium hover:underline">
-                            🔗 Facebook/Zalo
-                          </a>
-                        )}
-                        <span className="text-gray-400">📅 Đăng ký: {format(user.createdAt, 'dd/MM/yyyy')}</span>
-                      </div>
+                    return (
+                      <tr key={user.id} className="hover:bg-blue-50/30 transition">
+                        {/* Name & Contact */}
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-bold text-gray-900 text-sm">{user.fullName}</div>
+                          <div className="text-gray-500 mt-0.5">📱 {user.phone}</div>
+                          <div className="text-gray-400 text-[11px]">📧 {user.email}</div>
+                          {user.facebookLink && (
+                            <a href={user.facebookLink} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline text-[11px] block mt-0.5">
+                              🔗 Facebook/Zalo
+                            </a>
+                          )}
+                        </td>
 
-                      {user.notes && (
-                        <div className="mt-2 text-xs bg-amber-50 text-amber-800 p-2 rounded-xl border border-amber-100 italic">
-                          📝 Ghi chú: {user.notes}
-                        </div>
-                      )}
-                    </div>
+                        {/* Inline Department Select */}
+                        <td className="px-4 py-3 align-top">
+                          <select
+                            value={user.department}
+                            onChange={(e) => handleDepartmentChangeInline(user.id, e.target.value)}
+                            className="px-2.5 py-1.5 border border-blue-200 bg-blue-50/60 rounded-xl font-bold text-blue-800 text-xs outline-none focus:ring-2 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                          >
+                            <option value="Hậu cần">Hậu cần</option>
+                            <option value="Truyền thông">Truyền thông</option>
+                            <option value="Sự kiện">Sự kiện</option>
+                            <option value="Tài trợ">Tài trợ</option>
+                            <option value="Nhân sự">Nhân sự</option>
+                          </select>
+                          {user.notes && (
+                            <div className="text-[11px] text-amber-700 bg-amber-50 p-1.5 rounded-lg mt-1 max-w-xs border border-amber-100">
+                              📝 {user.notes}
+                            </div>
+                          )}
+                        </td>
 
-                    {/* Admin Edit Action & Salary Display */}
-                    <div className="flex flex-wrap items-center gap-3 bg-white p-3 rounded-2xl border border-gray-200 shadow-2xs">
-                      <div className="text-xs">
-                        <span className="text-gray-400 font-medium block">Mức phụ cấp / ca:</span>
-                        <span className="font-bold text-emerald-700 text-sm">{(user.salaryRate || 50000).toLocaleString()} VND</span>
-                      </div>
+                        {/* Inline Salary Input */}
+                        <td className="px-4 py-3 text-right align-top">
+                          <input
+                            type="number"
+                            step={5000}
+                            value={user.salaryRate || 50000}
+                            onChange={(e) => handleSalaryChangeInline(user.id, Number(e.target.value))}
+                            className="w-24 px-2 py-1 border border-emerald-200 bg-emerald-50/50 rounded-lg text-right font-bold text-emerald-800 text-xs outline-none focus:ring-2 focus:ring-emerald-500"
+                          />
+                          <span className="text-[10px] text-gray-400 block mt-0.5">VND / ca</span>
+                        </td>
 
-                      <div className="text-xs border-l border-gray-200 pl-3">
-                        <span className="text-gray-400 font-medium block">Tổng nhận ({approvedCount} ca):</span>
-                        <span className="font-black text-blue-600 text-sm">{userTotalSalary.toLocaleString()} VND</span>
-                      </div>
+                        {/* Approved shift count */}
+                        <td className="px-4 py-3 text-center align-top font-bold text-sm">
+                          <span className="px-2.5 py-1 rounded-full bg-emerald-100 text-emerald-800 border border-emerald-200">
+                            {approvedCount} ca
+                          </span>
+                        </td>
 
-                      <button
-                        onClick={() => setEditingUser(user)}
-                        className="px-3 py-1.5 bg-blue-50 text-blue-700 hover:bg-blue-100 text-xs font-bold rounded-xl transition border border-blue-200"
-                      >
-                        ✏️ Sửa Bộ phận & Chi phí
-                      </button>
+                        {/* Total Salary */}
+                        <td className="px-4 py-3 text-right align-top font-black text-emerald-600 text-sm">
+                          {userTotalSalary.toLocaleString()} VND
+                        </td>
 
-                      <button
-                        onClick={() => handleDeleteUser(user.id, user.fullName)}
-                        title="Xoá TNV"
-                        className="text-gray-400 hover:text-red-600 p-1.5 transition"
-                      >
-                        🗑️
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* Checkins Sub-table */}
-                  <div className="p-5">
-                    {userCheckins.length === 0 ? (
-                      <div className="text-xs text-gray-400 font-medium italic">TNV này chưa điểm danh ca nào.</div>
-                    ) : (
-                      <div className="overflow-x-auto">
-                        <table className="w-full text-xs text-left">
-                          <thead className="text-[11px] text-gray-400 bg-gray-50 uppercase font-semibold">
-                            <tr>
-                              <th className="px-3 py-2 w-8"></th>
-                              <th className="px-3 py-2">Ca làm việc</th>
-                              <th className="px-3 py-2">Thời gian điểm danh</th>
-                              <th className="px-3 py-2">Trạng thái</th>
-                              <th className="px-3 py-2 text-right">Thao tác</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {userCheckins.map(ci => (
-                              <tr key={ci.id} className="border-b border-gray-50 hover:bg-gray-50/50">
-                                <td className="px-3 py-2">
-                                  {ci.status === 'pending' && (
-                                    <input
-                                      type="checkbox"
-                                      className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
-                                      checked={selectedCheckins.has(ci.id)}
-                                      onChange={() => toggleSelection(ci.id)}
-                                    />
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 font-semibold text-gray-900">
-                                  {ci.shiftName || 'Ca làm việc'}
-                                </td>
-                                <td className="px-3 py-2 text-gray-600">
-                                  {format(ci.createdAt, 'HH:mm - dd/MM/yyyy')}
-                                </td>
-                                <td className="px-3 py-2">
+                        {/* Checkin History & Approve Buttons */}
+                        <td className="px-4 py-3 align-top">
+                          {userCheckins.length === 0 ? (
+                            <span className="text-gray-400 italic text-[11px]">Chưa điểm danh ca nào</span>
+                          ) : (
+                            <div className="space-y-1 max-h-24 overflow-y-auto pr-1 scrollbar-hide">
+                              {userCheckins.map(ci => (
+                                <div key={ci.id} className="flex items-center justify-between text-[11px] bg-gray-50 p-1.5 rounded-lg border border-gray-100">
+                                  <span>{ci.shiftName || 'Ca làm'} ({format(ci.createdAt, 'HH:mm dd/MM')})</span>
                                   {ci.status === 'pending' ? (
-                                    <span className="text-amber-700 bg-amber-50 px-2 py-0.5 rounded-full font-bold border border-amber-200 text-[10px]">
-                                      ⏳ Chờ duyệt
-                                    </span>
-                                  ) : (
-                                    <span className="text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full font-bold border border-emerald-200 text-[10px]">
-                                      ✓ Đã duyệt
-                                    </span>
-                                  )}
-                                </td>
-                                <td className="px-3 py-2 text-right">
-                                  {ci.status === 'pending' && (
                                     <button
                                       onClick={() => handleApproveSingle(ci.id)}
-                                      className="px-2.5 py-1 bg-blue-600 text-white rounded-lg font-bold hover:bg-blue-700 transition"
+                                      className="px-2 py-0.5 bg-amber-500 hover:bg-amber-600 text-white font-bold rounded text-[10px] transition"
                                     >
-                                      Duyệt ca này
+                                      Duyệt ca
                                     </button>
+                                  ) : (
+                                    <span className="text-emerald-600 font-bold text-[10px]">✓ Đã duyệt</span>
                                   )}
-                                </td>
-                              </tr>
-                            ))}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-        )}
+                                </div>
+                              ))}
+                            </div>
+                          )}
+                        </td>
+
+                        {/* Actions */}
+                        <td className="px-4 py-3 text-center align-top space-x-1">
+                          <button
+                            onClick={() => setEditingUser(user)}
+                            className="p-1.5 bg-blue-50 text-blue-600 rounded-lg hover:bg-blue-100 transition"
+                            title="Sửa chi tiết"
+                          >
+                            ✏️
+                          </button>
+                          <button
+                            onClick={() => handleDeleteUser(user.id, user.fullName)}
+                            className="p-1.5 bg-red-50 text-red-600 rounded-lg hover:bg-red-100 transition"
+                            title="Xoá TNV"
+                          >
+                            🗑️
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
       </main>
     </div>
   );

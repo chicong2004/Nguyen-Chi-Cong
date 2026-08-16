@@ -21,6 +21,9 @@ export interface Checkin {
   department: string;
   shiftName?: string; // e.g. "Ca Sáng (08:00 - 12:00)", "Ca Chiều (13:00 - 17:00)"
   status: 'pending' | 'approved';
+  checkinTime?: number;
+  checkoutTime?: number;
+  type?: 'checkin' | 'checkout' | 'full';
   qrCodeToken?: string;
   createdAt: number;
   updatedAt: number;
