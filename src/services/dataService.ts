@@ -704,10 +704,25 @@ export async function submitScheduleRegistration(
 export async function processQRCheckin(qrToken: string, activeUser?: User): Promise<{ success: boolean; message: string; checkin?: Checkin }> {
   try {
     let parsed: any = null;
-    try {
-      parsed = JSON.parse(qrToken);
-    } catch {
-      parsed = { type: 'event_checkin' };
+    if (qrToken.includes('http') || qrToken.includes('action=qr_scan')) {
+      try {
+        const urlObj = new URL(qrToken);
+        const params = urlObj.searchParams;
+        const type = params.get('type');
+        const date = params.get('date');
+        parsed = {
+          type: type === 'checkout' || type === 'event_checkout' ? 'event_checkout' : 'event_checkin',
+          date: date || format(new Date(), 'yyyy-MM-dd'),
+        };
+      } catch {
+        parsed = { type: 'event_checkin' };
+      }
+    } else {
+      try {
+        parsed = JSON.parse(qrToken);
+      } catch {
+        parsed = { type: 'event_checkin' };
+      }
     }
 
     if (!activeUser) {

@@ -73,6 +73,45 @@ export default function TNVDashboard() {
     return () => clearInterval(timer);
   }, [userProfile?.id]);
 
+  // Handle native camera scan (URL deep link) or pending scan after login
+  useEffect(() => {
+    const handleUrlOrPendingScan = async () => {
+      if (!activeProfile) return;
+
+      const params = new URLSearchParams(window.location.search);
+      let scanAction = params.get('action');
+      let scanType = params.get('type');
+      let scanDate = params.get('date');
+
+      if (!scanType && typeof sessionStorage !== 'undefined') {
+        try {
+          const pending = sessionStorage.getItem('pending_qr_scan');
+          if (pending) {
+            const parsed = JSON.parse(pending);
+            scanAction = 'qr_scan';
+            scanType = parsed.type;
+            scanDate = parsed.date;
+            sessionStorage.removeItem('pending_qr_scan');
+          }
+        } catch {}
+      }
+
+      if (scanAction === 'qr_scan' && scanType) {
+        const payload = JSON.stringify({
+          type: scanType === 'checkout' || scanType === 'event_checkout' ? 'event_checkout' : 'event_checkin',
+          date: scanDate || format(new Date(), 'yyyy-MM-dd'),
+        });
+
+        const res = await processQRCheckin(payload, activeProfile);
+        setSuccessMessage(res.message);
+        window.history.replaceState({}, document.title, window.location.pathname);
+        await loadUserData();
+      }
+    };
+
+    handleUrlOrPendingScan();
+  }, [activeProfile?.id]);
+
   const activeProfile = currentUserProfile || userProfile;
 
   useEffect(() => {

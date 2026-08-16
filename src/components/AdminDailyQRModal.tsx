@@ -14,12 +14,9 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
 
   if (!isOpen) return null;
 
-  const qrPayload = JSON.stringify({
-    type: qrType,
-    date: currentDate,
-    key: refreshKey,
-    code: `QR-${currentDate}-${qrType === 'event_checkin' ? 'IN' : 'OUT'}-${refreshKey.toString().slice(-4)}`,
-  });
+  const origin = typeof window !== 'undefined' ? window.location.origin : 'https://nguyen-chi-cong.vercel.app';
+  const qrTypeParam = qrType === 'event_checkout' ? 'checkout' : 'checkin';
+  const qrPayload = `${origin}/?action=qr_scan&type=${qrTypeParam}&date=${currentDate}&key=${refreshKey}`;
 
   const handleRefreshQR = () => {
     setRefreshKey(Date.now());

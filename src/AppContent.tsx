@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { useAuth } from './components/AuthContext';
 import TNVLogin from './components/TNVLogin';
 import AdminLogin from './components/AdminLogin';
@@ -8,6 +8,20 @@ import AdminDashboard from './components/AdminDashboard';
 function AppContent() {
   const { currentUser, loading, isLocalStorageMode } = useAuth();
   const [activeTab, setActiveTab] = useState<'tnv-login' | 'tnv-register' | 'admin-login'>('tnv-register');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      if (params.get('action') === 'qr_scan') {
+        const type = params.get('type') || 'checkin';
+        const date = params.get('date') || '';
+        try {
+          sessionStorage.setItem('pending_qr_scan', JSON.stringify({ type, date }));
+        } catch {}
+        setActiveTab('tnv-login');
+      }
+    }
+  }, []);
 
   if (loading) {
     return (
