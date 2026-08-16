@@ -55,37 +55,47 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     setError('');
     setSuccess('');
     setLoading(true);
 
     try {
+      const cleanEmail = (email || '').trim().toLowerCase();
+      if (!cleanEmail) {
+        throw new Error('Vui lòng nhập Email.');
+      }
+
       if (isLogin) {
-        const user = await loginTNV(email);
+        const user = await loginTNV(cleanEmail);
         setCurrentSessionUser(user);
       } else {
-        if (!fullName.trim() || !phone.trim() || !email.trim()) {
-          throw new Error('Vui lòng điền đầy đủ các thông tin bắt buộc (Họ tên, SĐT, Email)');
+        const cleanName = (fullName || '').trim();
+        const cleanPhone = (phone || '').trim();
+        if (!cleanName || !cleanPhone) {
+          throw new Error('Vui lòng điền đầy đủ Họ tên và Số điện thoại.');
         }
-        const chosenEvt = events.find(e => e.id === selectedEventId);
+        const chosenEvt = events.find(e => e.id === selectedEventId) || (events.length > 0 ? events[0] : undefined);
         const newUser = await registerTNV({
-          fullName,
-          email,
-          phone,
-          facebookLink,
-          department,
-          eventId: selectedEventId,
+          fullName: cleanName,
+          email: cleanEmail,
+          phone: cleanPhone,
+          facebookLink: (facebookLink || '').trim(),
+          department: department || 'Hậu cần',
+          eventId: selectedEventId || chosenEvt?.id || '',
           eventName: chosenEvt?.name || '',
-          notes,
+          notes: (notes || '').trim(),
         });
-        setSuccess('Đăng ký thành công! Đang tự động chuyển đến tài khoản...');
+        setSuccess('Đăng ký thành công! Đang tự động chuyển đến bảng cá nhân...');
         setTimeout(() => {
           setCurrentSessionUser(newUser);
-        }, 800);
+        }, 600);
       }
     } catch (err: any) {
-      console.error(err);
+      console.error("TNV form submit error:", err);
       setError(err.message || 'Có lỗi xảy ra, vui lòng thử lại.');
     } finally {
       setLoading(false);

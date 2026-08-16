@@ -136,29 +136,37 @@ export default function TNVDashboard() {
   }, [activeProfile?.department]);
 
   const handleScheduleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+    if (e) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
     if (!activeProfile) return;
     setIsSubmitting(true);
     setSuccessMessage('');
 
     try {
-      const selectedEvt = eventsList.find(evt => evt.id === selectedEventId);
+      const targetDate = selectedDate || format(new Date(), 'yyyy-MM-dd');
+      const targetShift = selectedShift || 'Ca Sáng (07:00 - 12:00)';
+      const targetDept = selectedDepartment || activeProfile.department || 'Hậu cần';
+      const selectedEvt = eventsList.find(evt => evt.id === selectedEventId) || (eventsList.length > 0 ? eventsList[0] : undefined);
+
       await submitScheduleRegistration(
         activeProfile, 
-        selectedDate, 
-        selectedShift, 
-        Number(otHours), 
-        notes,
-        selectedDepartment,
+        targetDate, 
+        targetShift, 
+        Number(otHours) || 0, 
+        (notes || '').trim(),
+        targetDept,
         selectedEvt?.id,
         selectedEvt?.name
       );
-      setSuccessMessage(`Đã gửi đăng ký lịch làm việc ca (${selectedDepartment} - ${selectedDate} - ${selectedShift})! Đang chờ Admin duyệt.`);
+
+      setSuccessMessage(`Đã gửi đăng ký lịch làm ca (${targetDept} - ${targetDate} - ${targetShift})! Đang chờ Admin duyệt.`);
       setNotes('');
       await loadUserData();
     } catch (err: any) {
       console.error("Lỗi đăng ký lịch:", err);
-      alert(err.message || "Không thể gửi đăng ký lịch, vui lòng thử lại.");
+      alert(err.message || "Không thể gửi đăng ký lịch, vui lòng kiểm tra lại.");
     } finally {
       setIsSubmitting(false);
     }
