@@ -7,7 +7,10 @@ import {
   setStorageMode,
   getLocalSession, 
   setLocalSession, 
-  fetchAllUsers 
+  fetchAllUsers,
+  fetchEventsListAsync,
+  fetchDepartmentsListAsync,
+  subscribeToRealtimeChanges
 } from '../services/dataService';
 
 interface AuthContextType {
@@ -107,12 +110,26 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     loadSession();
 
     if (isSupabaseActive()) {
+      fetchEventsListAsync().catch(() => {});
+      fetchDepartmentsListAsync().catch(() => {});
+
+      const unsubscribe = subscribeToRealtimeChanges(() => {
+        loadSession();
+      });
+
       const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
         if (!session && !getLocalSession()) {
           setCurrentUser(null);
         }
       });
-      return () => subscription.unsubscribe();
+
+      const timer = setInterval(loadSession, 3000);
+
+      return () => {
+        subscription.unsubscribe();
+        unsubscribe();
+        clearInterval(timer);
+      };
     }
   }, [currentMode]);
 
