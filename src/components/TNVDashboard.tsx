@@ -1,6 +1,18 @@
 import React, { useEffect, useState } from 'react';
 import { useAuth } from './AuthContext';
-import { fetchCheckins, fetchAllUsers, submitScheduleRegistration, processQRCheckin, getDepartmentsList, calculateShiftPay, getDepartmentRate, getActiveEventsList, fetchActiveEventsListAsync, subscribeToRealtimeChanges } from '../services/dataService';
+import { 
+  fetchCheckins, 
+  fetchAllUsers, 
+  submitScheduleRegistration, 
+  processQRCheckin, 
+  getDepartmentsList, 
+  fetchDepartmentsListAsync,
+  calculateShiftPay, 
+  getDepartmentRate, 
+  getActiveEventsList, 
+  fetchActiveEventsListAsync, 
+  subscribeToRealtimeChanges 
+} from '../services/dataService';
 import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
 import QRScannerModal from './QRScannerModal';
@@ -15,7 +27,7 @@ export default function TNVDashboard() {
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Registration Form State
-  const [departmentsList, setDepartmentsList] = useState<string[]>([]);
+  const [departmentsList, setDepartmentsList] = useState<string[]>(getDepartmentsList());
   const [eventsList, setEventsList] = useState<EventItem[]>([]);
   const [selectedDepartment, setSelectedDepartment] = useState(userProfile?.department || 'Hậu cần');
   const [selectedEventId, setSelectedEventId] = useState<string>('');
@@ -36,10 +48,15 @@ export default function TNVDashboard() {
       const updatedProfile = allUsers.find(u => u.id === activeProfile.id);
       if (updatedProfile) {
         setCurrentUserProfile(updatedProfile);
+        if (updatedProfile.department) {
+          setSelectedDepartment(prev => prev || updatedProfile.department);
+        }
       }
 
       // 2. Sync latest departments & active events list directly from Supabase Cloud
-      setDepartmentsList(getDepartmentsList());
+      const deps = await fetchDepartmentsListAsync();
+      setDepartmentsList(deps);
+
       const evts = await fetchActiveEventsListAsync();
       setEventsList(evts);
       setSelectedEventId(prev => {
@@ -61,10 +78,11 @@ export default function TNVDashboard() {
 
   useEffect(() => {
     loadUserData();
-    const deps = getDepartmentsList();
-    setDepartmentsList(deps);
 
     const syncEventsAndDeps = async () => {
+      const deps = await fetchDepartmentsListAsync();
+      setDepartmentsList(deps);
+
       const activeEvts = await fetchActiveEventsListAsync();
       setEventsList(activeEvts);
       if (activeEvts.length > 0 && !selectedEventId) {

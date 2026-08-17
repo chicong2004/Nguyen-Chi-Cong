@@ -874,14 +874,11 @@ export async function submitScheduleRegistration(
     }
   }
 
-  if (targetDepartment) {
-    user.department = targetDepartment;
-    user.salaryRate = deptRate;
-    user.updatedAt = Date.now();
-    try {
-      await updateUserProfileByAdmin(user.id, { department: targetDepartment, salaryRate: deptRate });
-    } catch {}
-  }
+  user.department = chosenDepartment;
+  user.salaryRate = deptRate;
+  user.updatedAt = Date.now();
+  setLocalSession(user);
+  await safeSupabaseUpsertUser(user);
 
   const existingCheckins = getLocalCheckins();
   const existingShift = existingCheckins.find(c => 

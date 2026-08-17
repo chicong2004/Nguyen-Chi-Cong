@@ -1,6 +1,16 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from './AuthContext';
-import { registerTNV, loginTNV, getDepartmentsList, getDepartmentRate, fetchAllUsers, fetchActiveEventsListAsync, getActiveEventsList } from '../services/dataService';
+import { 
+  registerTNV, 
+  loginTNV, 
+  getDepartmentsList, 
+  fetchDepartmentsListAsync, 
+  getDepartmentRate, 
+  fetchAllUsers, 
+  fetchActiveEventsListAsync, 
+  getActiveEventsList,
+  subscribeToRealtimeChanges,
+} from '../services/dataService';
 import { EventItem } from '../types';
 
 interface TNVLoginProps {
@@ -10,7 +20,7 @@ interface TNVLoginProps {
 export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const { setCurrentSessionUser, isLocalStorageMode } = useAuth();
   const [isLogin, setIsLogin] = useState(initialIsLogin);
-  const [departments, setDepartments] = useState<string[]>([]);
+  const [departments, setDepartments] = useState<string[]>(getDepartmentsList());
   const [events, setEvents] = useState<EventItem[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
 
@@ -23,7 +33,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
       } catch (err) {
         console.warn("TNVLogin fetchAllUsers notice:", err);
       }
-      const deps = getDepartmentsList();
+      const deps = await fetchDepartmentsListAsync();
       setDepartments(deps);
       if (deps.length > 0) {
         setDepartment(prev => (deps.includes(prev) ? prev : deps[0]));
@@ -37,8 +47,14 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
     };
 
     syncData();
+    const unsubscribe = subscribeToRealtimeChanges(() => {
+      syncData();
+    });
     const interval = setInterval(syncData, 3000);
-    return () => clearInterval(interval);
+    return () => {
+      unsubscribe();
+      clearInterval(interval);
+    };
   }, [initialIsLogin]);
 
   // Form State
