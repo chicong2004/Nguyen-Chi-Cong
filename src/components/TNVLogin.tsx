@@ -3,12 +3,11 @@ import { useAuth } from './AuthContext';
 import { 
   registerTNV, 
   loginTNV, 
+  resetPasswordWithEmailAndPhone,
   getDepartmentsList, 
   fetchDepartmentsListAsync, 
-  getDepartmentRate, 
   fetchAllUsers, 
   fetchActiveEventsListAsync, 
-  getActiveEventsList,
   subscribeToRealtimeChanges,
 } from '../services/dataService';
 import { EventItem } from '../types';
@@ -23,6 +22,16 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const [departments, setDepartments] = useState<string[]>(getDepartmentsList());
   const [events, setEvents] = useState<EventItem[]>([]);
   const [selectedEventId, setSelectedEventId] = useState<string>('');
+
+  // Forgot Password State
+  const [isForgotPasswordOpen, setIsForgotPasswordOpen] = useState(false);
+  const [resetEmail, setResetEmail] = useState('');
+  const [resetPhone, setResetPhone] = useState('');
+  const [resetNewPassword, setResetNewPassword] = useState('');
+  const [resetConfirmPassword, setResetConfirmPassword] = useState('');
+  const [resetError, setResetError] = useState('');
+  const [resetSuccess, setResetSuccess] = useState('');
+  const [resetLoading, setResetLoading] = useState(false);
 
   useEffect(() => {
     setIsLogin(initialIsLogin);
@@ -86,13 +95,16 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
       }
 
       if (isLogin) {
-        const user = await loginTNV(cleanEmail);
+        const user = await loginTNV(cleanEmail, password);
         setCurrentSessionUser(user);
       } else {
         const cleanName = (fullName || '').trim();
         const cleanPhone = (phone || '').trim();
         if (!cleanName || !cleanPhone) {
           throw new Error('Vui lòng điền đầy đủ Họ tên và Số điện thoại.');
+        }
+        if (!password || password.trim().length < 4) {
+          throw new Error('Vui lòng đặt Mật khẩu từ 4 ký tự trở lên.');
         }
         const chosenEvt = events.find(e => e.id === selectedEventId) || (events.length > 0 ? events[0] : undefined);
         const newUser = await registerTNV({
@@ -104,6 +116,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
           eventId: selectedEventId || chosenEvt?.id || '',
           eventName: chosenEvt?.name || '',
           notes: (notes || '').trim(),
+          password: password.trim(),
         });
         setSuccess('Đăng ký thành công! Đang tự động chuyển đến bảng cá nhân...');
         setTimeout(() => {
@@ -118,13 +131,47 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
     }
   };
 
+  const handleResetPasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setResetError('');
+    setResetSuccess('');
+
+    if (!resetNewPassword || resetNewPassword.trim().length < 4) {
+      setResetError('Mật khẩu mới phải từ 4 ký tự trở lên.');
+      return;
+    }
+
+    if (resetNewPassword.trim() !== resetConfirmPassword.trim()) {
+      setResetError('Mật khẩu xác nhận không trùng khớp.');
+      return;
+    }
+
+    setResetLoading(true);
+    try {
+      const updatedUser = await resetPasswordWithEmailAndPhone(
+        resetEmail,
+        resetPhone,
+        resetNewPassword
+      );
+      setResetSuccess('Đặt lại mật khẩu thành công! Đang tự động đăng nhập...');
+      setTimeout(() => {
+        setIsForgotPasswordOpen(false);
+        setCurrentSessionUser(updatedUser);
+      }, 1000);
+    } catch (err: any) {
+      setResetError(err.message || 'Xác minh thất bại. Vui lòng kiểm tra lại Email và Số điện thoại.');
+    } finally {
+      setResetLoading(false);
+    }
+  };
+
   const fillQuickDemoUser = () => {
     setIsLogin(true);
     setEmail('nguyenvanan@gmail.com');
   };
 
   return (
-    <div className="w-full max-w-md p-6 bg-white rounded-2xl shadow-lg border border-gray-100">
+    <div className="w-full max-w-md p-6 bg-white rounded-2xl shadow-lg border border-gray-100 relative">
       <div className="text-center mb-6">
         <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center mx-auto mb-3">
           <svg className="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -135,7 +182,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
           {isLogin ? 'Đăng Nhập TNV / CTV' : 'Đăng Ký TNV / CTV Mới'}
         </h2>
         <p className="text-xs text-gray-500 mt-1">
-          {isLogin ? 'Điền email đã đăng ký để vào bảng cá nhân' : 'Điền thông tin cá nhân để đăng ký vào đội ngũ Tình nguyện viên'}
+          {isLogin ? 'Điền email và mật khẩu để vào bảng cá nhân' : 'Điền thông tin cá nhân và mật khẩu để đăng ký vào đội ngũ'}
         </p>
       </div>
 
@@ -233,7 +280,23 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
         </div>
 
         <div>
-          <label className="block text-xs font-semibold text-gray-700 mb-1">Mật khẩu <span className="text-red-500">*</span></label>
+          <div className="flex items-center justify-between mb-1">
+            <label className="block text-xs font-semibold text-gray-700">Mật khẩu <span className="text-red-500">*</span></label>
+            {isLogin && (
+              <button
+                type="button"
+                onClick={() => {
+                  setResetEmail(email);
+                  setIsForgotPasswordOpen(true);
+                  setResetError('');
+                  setResetSuccess('');
+                }}
+                className="text-[11px] font-bold text-blue-600 hover:underline"
+              >
+                🔑 Quên mật khẩu?
+              </button>
+            )}
+          </div>
           <input
             type="password"
             value={password}
@@ -287,6 +350,100 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
           {isLogin ? 'Đăng ký ngay' : 'Đăng nhập'}
         </button>
       </div>
+
+      {/* Forgot Password Modal */}
+      {isForgotPasswordOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setIsForgotPasswordOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 bg-gray-100 p-2 rounded-full transition"
+            >
+              ✕
+            </button>
+
+            <div className="text-center mb-5">
+              <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-2 text-lg font-bold">
+                🔑
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Quên / Đặt Lại Mật Khẩu</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Nhập Email và Số điện thoại đã đăng ký để xác minh tài khoản và cài đặt mật khẩu mới.
+              </p>
+            </div>
+
+            {resetError && <div className="p-3 mb-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl font-semibold">{resetError}</div>}
+            {resetSuccess && <div className="p-3 mb-4 text-xs text-green-600 bg-green-50 border border-green-100 rounded-xl font-semibold">{resetSuccess}</div>}
+
+            <form onSubmit={handleResetPasswordSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Email đã đăng ký <span className="text-red-500">*</span></label>
+                <input
+                  type="email"
+                  value={resetEmail}
+                  onChange={(e) => setResetEmail(e.target.value)}
+                  required
+                  placeholder="example@gmail.com"
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Số điện thoại xác minh <span className="text-red-500">*</span></label>
+                <input
+                  type="tel"
+                  value={resetPhone}
+                  onChange={(e) => setResetPhone(e.target.value)}
+                  required
+                  placeholder="Nhập SĐT đã dùng để đăng ký TNV"
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mật khẩu mới <span className="text-red-500">*</span></label>
+                <input
+                  type="password"
+                  value={resetNewPassword}
+                  onChange={(e) => setResetNewPassword(e.target.value)}
+                  required
+                  placeholder="Nhập mật khẩu mới (tối thiểu 4 ký tự)"
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Xác nhận mật khẩu mới <span className="text-red-500">*</span></label>
+                <input
+                  type="password"
+                  value={resetConfirmPassword}
+                  onChange={(e) => setResetConfirmPassword(e.target.value)}
+                  required
+                  placeholder="Nhập lại mật khẩu mới"
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsForgotPasswordOpen(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={resetLoading}
+                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md transition disabled:opacity-50"
+                >
+                  {resetLoading ? 'Đang xác minh...' : '💾 Đổi Mật Khẩu & Đăng Nhập'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

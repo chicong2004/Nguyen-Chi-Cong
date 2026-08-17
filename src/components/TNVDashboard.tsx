@@ -11,7 +11,8 @@ import {
   getDepartmentRate, 
   getActiveEventsList, 
   fetchActiveEventsListAsync, 
-  subscribeToRealtimeChanges 
+  subscribeToRealtimeChanges,
+  changeUserPassword,
 } from '../services/dataService';
 import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
@@ -25,6 +26,15 @@ export default function TNVDashboard() {
   const [checkins, setCheckins] = useState<Checkin[]>([]);
   const [loading, setLoading] = useState(true);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Change Password State
+  const [isChangePasswordOpen, setIsChangePasswordOpen] = useState(false);
+  const [oldPassInput, setOldPassInput] = useState('');
+  const [newPassInput, setNewPassInput] = useState('');
+  const [confirmPassInput, setConfirmPassInput] = useState('');
+  const [changePassError, setChangePassError] = useState('');
+  const [changePassSuccess, setChangePassSuccess] = useState('');
+  const [changePassLoading, setChangePassLoading] = useState(false);
 
   // Registration Form State
   const [departmentsList, setDepartmentsList] = useState<string[]>(getDepartmentsList());
@@ -190,6 +200,36 @@ export default function TNVDashboard() {
     await loadUserData();
   };
 
+  const handleChangePasswordSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!activeProfile) return;
+    setChangePassError('');
+    setChangePassSuccess('');
+
+    if (!newPassInput || newPassInput.trim().length < 4) {
+      setChangePassError('Mật khẩu mới phải từ 4 ký tự trở lên.');
+      return;
+    }
+
+    if (newPassInput.trim() !== confirmPassInput.trim()) {
+      setChangePassError('Mật khẩu mới xác nhận không trùng khớp.');
+      return;
+    }
+
+    setChangePassLoading(true);
+    try {
+      await changeUserPassword(activeProfile.id, oldPassInput, newPassInput);
+      setChangePassSuccess('Đã đổi mật khẩu thành công!');
+      setTimeout(() => {
+        setIsChangePasswordOpen(false);
+      }, 1200);
+    } catch (err: any) {
+      setChangePassError(err.message || 'Đổi mật khẩu thất bại, vui lòng kiểm tra lại.');
+    } finally {
+      setChangePassLoading(false);
+    }
+  };
+
   if (!activeProfile) return null;
 
   const approvedShifts = checkins.filter(c => c.status === 'approved').length;
@@ -219,13 +259,109 @@ export default function TNVDashboard() {
           <h1 className="text-xl font-black text-gray-900 mt-1">Xin chào, {activeProfile.fullName}</h1>
           <p className="text-xs text-gray-500">{activeProfile.email} • {activeProfile.phone}</p>
         </div>
-        <button 
-          onClick={logout}
-          className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-xl transition"
-        >
-          Đăng xuất
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => {
+              setOldPassInput('');
+              setNewPassInput('');
+              setConfirmPassInput('');
+              setChangePassError('');
+              setChangePassSuccess('');
+              setIsChangePasswordOpen(true);
+            }}
+            className="text-xs font-bold text-purple-700 bg-purple-50 hover:bg-purple-100 px-3 py-1.5 rounded-xl transition border border-purple-200"
+          >
+            🔑 Đổi MK
+          </button>
+          <button 
+            onClick={logout}
+            className="text-xs font-semibold text-red-600 hover:text-red-700 bg-red-50 hover:bg-red-100 px-3 py-1.5 rounded-xl transition"
+          >
+            Đăng xuất
+          </button>
+        </div>
       </div>
+
+      {/* Change Password Modal */}
+      {isChangePasswordOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/60 backdrop-blur-xs">
+          <div className="bg-white rounded-2xl max-w-md w-full p-6 shadow-2xl relative border border-gray-100 animate-in fade-in zoom-in-95 duration-150">
+            <button
+              onClick={() => setIsChangePasswordOpen(false)}
+              className="absolute top-4 right-4 text-gray-400 hover:text-gray-700 bg-gray-100 p-2 rounded-full transition"
+            >
+              ✕
+            </button>
+
+            <div className="text-center mb-5">
+              <div className="w-10 h-10 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center mx-auto mb-2 text-lg font-bold">
+                🔑
+              </div>
+              <h3 className="text-xl font-bold text-gray-900">Đổi Mật Khẩu Tài Khoản</h3>
+              <p className="text-xs text-gray-500 mt-1">
+                Cập nhật mật khẩu mới cho tài khoản TNV <span className="font-bold text-gray-800">{activeProfile.fullName}</span>
+              </p>
+            </div>
+
+            {changePassError && <div className="p-3 mb-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl font-semibold">{changePassError}</div>}
+            {changePassSuccess && <div className="p-3 mb-4 text-xs text-green-600 bg-green-50 border border-green-100 rounded-xl font-semibold">{changePassSuccess}</div>}
+
+            <form onSubmit={handleChangePasswordSubmit} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mật khẩu hiện tại</label>
+                <input
+                  type="password"
+                  value={oldPassInput}
+                  onChange={(e) => setOldPassInput(e.target.value)}
+                  placeholder="Nhập mật khẩu đang dùng (nếu có)"
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Mật khẩu mới <span className="text-red-500">*</span></label>
+                <input
+                  type="password"
+                  value={newPassInput}
+                  onChange={(e) => setNewPassInput(e.target.value)}
+                  required
+                  placeholder="Nhập mật khẩu mới (tối thiểu 4 ký tự)"
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Xác nhận mật khẩu mới <span className="text-red-500">*</span></label>
+                <input
+                  type="password"
+                  value={confirmPassInput}
+                  onChange={(e) => setConfirmPassInput(e.target.value)}
+                  required
+                  placeholder="Nhập lại mật khẩu mới"
+                  className="w-full px-3.5 py-2 border border-gray-300 rounded-xl focus:ring-2 focus:ring-purple-500 outline-none text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsChangePasswordOpen(false)}
+                  className="px-4 py-2 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl text-xs font-bold transition"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  disabled={changePassLoading}
+                  className="px-5 py-2 bg-purple-600 hover:bg-purple-700 text-white rounded-xl text-xs font-bold shadow-md transition disabled:opacity-50"
+                >
+                  {changePassLoading ? 'Đang cập nhật...' : '💾 Lưu Mật Khẩu Mới'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
 
       <div className="p-6 space-y-6 flex-1">
         {/* Basic Stats Cards with Accumulated Total Earnings */}

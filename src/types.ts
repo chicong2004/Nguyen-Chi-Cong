@@ -25,6 +25,7 @@ export interface User {
   salaryRate: number; // VND / ca (Chỉ Admin mới có quyền sửa)
   adjustmentAmount?: number; // Số tiền cộng (+) thưởng/phụ cấp hoặc trừ (-) phạt/tạm ứng
   adjustmentNote?: string; // Lý do chi tiết cộng/trừ tiền
+  password?: string; // Mật khẩu đăng nhập tài khoản TNV
   createdAt: number;
   updatedAt: number;
 }

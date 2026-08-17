@@ -20,6 +20,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
   const [adjustmentNote, setAdjustmentNote] = useState('');
   const [facebookLink, setFacebookLink] = useState('');
   const [notes, setNotes] = useState('');
+  const [password, setPassword] = useState('');
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -36,6 +37,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
       setAdjustmentNote(user.adjustmentNote || '');
       setFacebookLink(user.facebookLink || '');
       setNotes(user.notes || '');
+      setPassword(user.password || '');
     }
   }, [user]);
 
@@ -57,6 +59,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
         adjustmentNote,
         facebookLink,
         notes,
+        password: password ? password.trim() : undefined,
       });
       onSaved();
       onClose();
@@ -189,6 +192,20 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
                 />
               </div>
             </div>
+          </div>
+
+          <div>
+            <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
+              <span>🔑 Mật khẩu đăng nhập của TNV</span>
+              <span className="text-[10px] text-blue-600 font-normal">Admin có thể cài/đặt lại MK cho TNV</span>
+            </label>
+            <input
+              type="text"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="Nhập mật khẩu mới (VD: 123456...)"
+              className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm font-semibold outline-none focus:ring-2 focus:ring-blue-500 bg-blue-50/20"
+            />
           </div>
 
           <div>

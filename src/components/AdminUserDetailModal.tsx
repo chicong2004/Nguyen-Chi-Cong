@@ -124,7 +124,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
               </span>
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
-              📱 Phone: <span className="font-bold text-gray-800">{user.phone}</span> &bull; 📧 Email: <span className="font-bold text-gray-800">{user.email}</span>
+              📱 Phone: <span className="font-bold text-gray-800">{user.phone}</span> &bull; 📧 Email: <span className="font-bold text-gray-800">{user.email}</span> &bull; 🔑 MK: <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded-md border border-purple-200">{user.password || user.phone}</span>
             </p>
             {user.facebookLink && (
               <a href={user.facebookLink} target="_blank" rel="noopener noreferrer" className="text-xs text-blue-600 hover:underline font-semibold block mt-0.5">

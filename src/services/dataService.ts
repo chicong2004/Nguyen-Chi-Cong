@@ -611,8 +611,16 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
   }
   
   let finalNotes = user.notes || '';
+  const meta: any = {};
   if (user.adjustmentAmount || user.adjustmentNote) {
-    finalNotes = `${finalNotes}||__ADJ__:${JSON.stringify({ a: user.adjustmentAmount || 0, n: user.adjustmentNote || '' })}`;
+    meta.a = user.adjustmentAmount || 0;
+    meta.n = user.adjustmentNote || '';
+  }
+  if (user.password) {
+    meta.p = user.password;
+  }
+  if (Object.keys(meta).length > 0) {
+    finalNotes = `${finalNotes}||__ADJ__:${JSON.stringify(meta)}`;
   }
 
   const cleanPayload: any = {
@@ -709,6 +717,8 @@ export async function registerTNV(payload: {
   const users = await fetchAllUsers();
   const existingUser = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
 
+  const userPassword = (payload.password || '').trim() || payload.phone.trim();
+
   if (existingUser) {
     existingUser.fullName = payload.fullName || existingUser.fullName;
     existingUser.phone = payload.phone || existingUser.phone;
@@ -717,6 +727,7 @@ export async function registerTNV(payload: {
     existingUser.eventId = payload.eventId || existingUser.eventId;
     existingUser.eventName = payload.eventName || existingUser.eventName;
     if (payload.facebookLink) existingUser.facebookLink = payload.facebookLink;
+    if (payload.password) existingUser.password = payload.password.trim();
     existingUser.updatedAt = Date.now();
 
     saveLocalUsers(users);
@@ -738,6 +749,7 @@ export async function registerTNV(payload: {
     eventName: payload.eventName || '',
     notes: payload.notes || '',
     salaryRate: getDepartmentRate(payload.department),
+    password: userPassword,
     createdAt: Date.now(),
     updatedAt: Date.now(),
   };
@@ -755,12 +767,86 @@ export async function registerTNV(payload: {
 
 export async function loginTNV(email: string, password?: string): Promise<User> {
   const users = await fetchAllUsers();
-  const user = users.find(u => u.email.toLowerCase() === email.toLowerCase());
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const user = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
   if (!user) {
     throw new Error('Email chưa được đăng ký trong hệ thống!');
   }
+
+  const cleanPass = (password || '').trim();
+  if (cleanPass && user.password && user.password.trim()) {
+    if (cleanPass !== user.password.trim()) {
+      throw new Error('Mật khẩu không chính xác. Vui lòng kiểm tra lại hoặc bấm "Quên mật khẩu"!');
+    }
+  }
+
+  if (cleanPass && !user.password) {
+    user.password = cleanPass;
+    saveLocalUsers(users);
+    safeSupabaseUpsertUser(user);
+  }
+
   setLocalSession(user);
   return user;
+}
+
+// Self-Service Reset Password using Email and Phone verification
+export async function resetPasswordWithEmailAndPhone(email: string, phone: string, newPassword: string): Promise<User> {
+  const cleanEmail = (email || '').trim().toLowerCase();
+  const cleanPhone = (phone || '').trim().replace(/\s+/g, '');
+  const cleanNewPass = (newPassword || '').trim();
+
+  if (!cleanEmail || !cleanPhone || !cleanNewPass) {
+    throw new Error('Vui lòng nhập đầy đủ Email, Số điện thoại và Mật khẩu mới.');
+  }
+
+  const users = await fetchAllUsers();
+  const user = users.find(u => {
+    const uEmail = (u.email || '').trim().toLowerCase();
+    const uPhone = (u.phone || '').trim().replace(/\s+/g, '');
+    return uEmail === cleanEmail && uPhone === cleanPhone;
+  });
+
+  if (!user) {
+    throw new Error('Không tìm thấy tài khoản phù hợp với Email và Số điện thoại này. Vui lòng kiểm tra lại thông tin!');
+  }
+
+  user.password = cleanNewPass;
+  user.updatedAt = Date.now();
+
+  saveLocalUsers(users);
+  setLocalSession(user);
+  await safeSupabaseUpsertUser(user);
+  triggerCloudSync();
+
+  return user;
+}
+
+// User self-service change password
+export async function changeUserPassword(userId: string, oldPassword: string, newPassword: string): Promise<void> {
+  const users = getLocalUsers();
+  const user = users.find(u => u.id === userId);
+  if (!user) {
+    throw new Error('Không tìm thấy tài khoản người dùng.');
+  }
+
+  const cleanOld = (oldPassword || '').trim();
+  const cleanNew = (newPassword || '').trim();
+
+  if (!cleanNew) {
+    throw new Error('Mật khẩu mới không được để trống.');
+  }
+
+  if (user.password && user.password.trim() && cleanOld !== user.password.trim()) {
+    throw new Error('Mật khẩu hiện tại không chính xác.');
+  }
+
+  user.password = cleanNew;
+  user.updatedAt = Date.now();
+  saveLocalUsers(users);
+  setLocalSession(user);
+  await safeSupabaseUpsertUser(user);
+  triggerCloudSync();
 }
 
 export async function loginAdmin(passcode: string): Promise<User> {
@@ -841,14 +927,16 @@ export async function fetchAllUsers(): Promise<User[]> {
           let rawNotes = d.notes || '';
           let parsedAdjAmount = Number(d.adjustment_amount || d.adjustmentAmount) || 0;
           let parsedAdjNote = d.adjustment_note || d.adjustmentNote || '';
+          let parsedPassword = d.password || d.pass || '';
 
           if (typeof rawNotes === 'string' && rawNotes.includes('||__ADJ__:')) {
             const parts = rawNotes.split('||__ADJ__:');
             rawNotes = parts[0];
             try {
               const parsed = JSON.parse(parts[1]);
-              if (!parsedAdjAmount && parsed.a) parsedAdjAmount = Number(parsed.a) || 0;
-              if (!parsedAdjNote && parsed.n) parsedAdjNote = parsed.n;
+              if (!parsedAdjAmount && parsed.a !== undefined) parsedAdjAmount = Number(parsed.a) || 0;
+              if (!parsedAdjNote && parsed.n !== undefined) parsedAdjNote = parsed.n;
+              if (!parsedPassword && parsed.p) parsedPassword = parsed.p;
             } catch {}
           }
 
@@ -866,6 +954,7 @@ export async function fetchAllUsers(): Promise<User[]> {
             salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
             adjustmentAmount: parsedAdjAmount,
             adjustmentNote: parsedAdjNote,
+            password: parsedPassword,
             createdAt: safeParseTimestamp(d.created_at || d.createdAt),
             updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
           };
@@ -1258,6 +1347,7 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     if (data.salaryRate !== undefined) user.salaryRate = data.salaryRate;
     if (data.adjustmentAmount !== undefined) user.adjustmentAmount = data.adjustmentAmount;
     if (data.adjustmentNote !== undefined) user.adjustmentNote = data.adjustmentNote;
+    if (data.password !== undefined && data.password.trim()) user.password = data.password.trim();
     user.updatedAt = Date.now();
     saveLocalUsers(users);
   }
