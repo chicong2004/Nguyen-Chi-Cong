@@ -515,7 +515,7 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
   try {
     const { error } = await supabase.from('users').upsert(cleanPayload);
     if (error) {
-      console.warn("User upsert warning, retrying update:", error.message);
+      console.warn("User upsert warning, retrying insert:", error.message);
       const { error: insertErr } = await supabase.from('users').insert([cleanPayload]);
       if (insertErr) {
         console.error("LỖI SUPABASE USERS:", insertErr);
@@ -591,14 +591,15 @@ export async function registerTNV(payload: {
     }
   }
 
-  // Check local users for existing email registration
-  const users = getLocalUsers();
+  // Fetch updated user list from Cloud first to ensure SSOT
+  const users = await fetchAllUsers();
   const existingUser = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
 
   if (existingUser) {
     existingUser.fullName = payload.fullName || existingUser.fullName;
     existingUser.phone = payload.phone || existingUser.phone;
     existingUser.department = payload.department || existingUser.department;
+    existingUser.salaryRate = getDepartmentRate(existingUser.department);
     existingUser.eventId = payload.eventId || existingUser.eventId;
     existingUser.eventName = payload.eventName || existingUser.eventName;
     if (payload.facebookLink) existingUser.facebookLink = payload.facebookLink;
