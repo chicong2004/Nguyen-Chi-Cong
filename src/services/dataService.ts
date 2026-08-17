@@ -630,14 +630,17 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
   try {
     const { error } = await supabase.from('users').upsert(cleanPayload);
     if (error) {
-      console.warn("User upsert warning, retrying insert:", error.message);
-      const { error: insertErr } = await supabase.from('users').insert([cleanPayload]);
-      if (insertErr) {
-        console.error("LỖI SUPABASE USERS:", insertErr);
+      // Fallback: If 400 Bad Request error (column adjustment_amount/adjustment_note missing in DB schema), retry with safe payload
+      const fallbackPayload = { ...cleanPayload };
+      delete fallbackPayload.adjustment_amount;
+      delete fallbackPayload.adjustment_note;
+      if (user.adjustmentAmount || user.adjustmentNote) {
+        fallbackPayload.notes = `${user.notes || ''}||__ADJ__:${JSON.stringify({ a: user.adjustmentAmount || 0, n: user.adjustmentNote || '' })}`;
       }
+      await supabase.from('users').upsert(fallbackPayload);
     }
   } catch (err: any) {
-    console.error("LỖI ĐỒNG BỘ SUPABASE USERS:", err);
+    console.warn("Notice syncing user to cloud:", err);
   }
 }
 
@@ -838,23 +841,39 @@ export async function fetchAllUsers(): Promise<User[]> {
         // Filter out system config row from volunteer user list
         const userRecords = data.filter(d => d.id !== SYSTEM_DEPTS_ID && d.full_name !== '__SYSTEM_DEPARTMENTS__');
 
-        const cloudUsers: User[] = userRecords.map(d => ({
-          id: d.id,
-          role: d.role || 'tnv',
-          fullName: d.full_name || d.fullName || d.name || 'TNV',
-          email: d.email || `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-          phone: d.phone || d.phoneNumber || '',
-          facebookLink: d.facebook_link || d.facebookLink || '',
-          department: d.department || 'Hậu cần',
-          eventId: d.event_id || d.eventId || '',
-          eventName: d.event_name || d.eventName || '',
-          notes: d.notes || '',
-          salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
-          adjustmentAmount: Number(d.adjustment_amount || d.adjustmentAmount) || 0,
-          adjustmentNote: d.adjustment_note || d.adjustmentNote || '',
-          createdAt: safeParseTimestamp(d.created_at || d.createdAt),
-          updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
-        }));
+        const cloudUsers: User[] = userRecords.map(d => {
+          let rawNotes = d.notes || '';
+          let parsedAdjAmount = Number(d.adjustment_amount || d.adjustmentAmount) || 0;
+          let parsedAdjNote = d.adjustment_note || d.adjustmentNote || '';
+
+          if (typeof rawNotes === 'string' && rawNotes.includes('||__ADJ__:')) {
+            const parts = rawNotes.split('||__ADJ__:');
+            rawNotes = parts[0];
+            try {
+              const parsed = JSON.parse(parts[1]);
+              if (!parsedAdjAmount && parsed.a) parsedAdjAmount = Number(parsed.a) || 0;
+              if (!parsedAdjNote && parsed.n) parsedAdjNote = parsed.n;
+            } catch {}
+          }
+
+          return {
+            id: d.id,
+            role: d.role || 'tnv',
+            fullName: d.full_name || d.fullName || d.name || 'TNV',
+            email: d.email || `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+            phone: d.phone || d.phoneNumber || '',
+            facebookLink: d.facebook_link || d.facebookLink || '',
+            department: d.department || 'Hậu cần',
+            eventId: d.event_id || d.eventId || '',
+            eventName: d.event_name || d.eventName || '',
+            notes: rawNotes,
+            salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
+            adjustmentAmount: parsedAdjAmount,
+            adjustmentNote: parsedAdjNote,
+            createdAt: safeParseTimestamp(d.created_at || d.createdAt),
+            updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
+          };
+        });
 
         // Filter out mock users (10000000-0000-4000-8000-...) when Cloud is active
         const realCloudUsers = cloudUsers.filter(u => !u.id.startsWith('10000000-0000-4000-8000'));
@@ -1272,7 +1291,24 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
       if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
       if (data.adjustmentAmount !== undefined) updatePayload.adjustment_amount = data.adjustmentAmount;
       if (data.adjustmentNote !== undefined) updatePayload.adjustment_note = data.adjustmentNote;
-      await supabase.from('users').update(updatePayload).eq('id', userId);
+      const { error } = await supabase.from('users').update(updatePayload).eq('id', userId);
+      if (error) {
+        // Fallback: If 400 Bad Request error (column adjustment_amount/adjustment_note missing in DB schema), retry with safe payload
+        const fallbackPayload = { ...updatePayload };
+        delete fallbackPayload.adjustment_amount;
+        delete fallbackPayload.adjustment_note;
+
+        const targetUser = user || getLocalUsers().find(u => u.id === userId);
+        const adj = data.adjustmentAmount !== undefined ? data.adjustmentAmount : (targetUser?.adjustmentAmount || 0);
+        const adjNote = data.adjustmentNote !== undefined ? data.adjustmentNote : (targetUser?.adjustmentNote || '');
+        const baseNote = data.notes !== undefined ? data.notes : (targetUser?.notes || '');
+
+        if (adj || adjNote) {
+          fallbackPayload.notes = `${baseNote}||__ADJ__:${JSON.stringify({ a: adj, n: adjNote })}`;
+        }
+
+        await supabase.from('users').update(fallbackPayload).eq('id', userId);
+      }
     } catch (e) {
       console.warn("Supabase update profile notice:", e);
     }

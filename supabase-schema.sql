@@ -23,6 +23,8 @@ ALTER TABLE users ADD COLUMN IF NOT EXISTS email text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS event_id text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS event_name text;
 ALTER TABLE users ADD COLUMN IF NOT EXISTS notes text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS adjustment_amount numeric DEFAULT 0;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS adjustment_note text DEFAULT '';
 
 -- 2. Create or Upgrade `checkins` table
 CREATE TABLE IF NOT EXISTS checkins (
