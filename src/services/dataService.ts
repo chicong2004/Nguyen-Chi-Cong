@@ -988,7 +988,18 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     }
 
     const actionType = parsed.type === 'event_checkout' ? 'checkout' : 'checkin';
-    const workDate = parsed.date || format(new Date(), 'yyyy-MM-dd');
+    const todayDate = format(new Date(), 'yyyy-MM-dd');
+    const qrDate = parsed.date || todayDate;
+
+    // 1. Strict Same-Day QR Validity Check
+    if (qrDate !== todayDate) {
+      return {
+        success: false,
+        message: `⚠️ Mã QR này đã hết hạn (chỉ có hiệu lực trong ngày ${qrDate}). Hôm nay là ngày ${todayDate}, vui lòng quét mã QR của ngày hôm nay!`,
+      };
+    }
+
+    const workDate = todayDate; // Strict date matching: ALWAYS use today's date
 
     const userCheckins = await fetchCheckins(activeUser.id);
     const localUserCheckins = getLocalCheckins().filter(c => c.userId === activeUser.id);
@@ -1006,23 +1017,14 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     });
 
     if (actionType === 'checkout') {
-      let openShift = allUserCheckins.find(c => c.checkinTime && !c.checkoutTime);
+      // STRICT SAME-DATE CHECKOUT: Search ONLY for shifts registered on workDate (today) that have a checkinTime
+      let openShift = allUserCheckins.find(c => c.workDate === workDate && c.checkinTime && !c.checkoutTime);
       if (!openShift) {
         openShift = allUserCheckins.find(c => c.workDate === workDate && c.checkinTime);
-      }
-      if (!openShift) {
-        openShift = allUserCheckins.find(c => c.workDate === workDate);
-      }
-      if (!openShift && allUserCheckins.length > 0) {
-        openShift = allUserCheckins[0];
       }
 
       if (openShift) {
         const now = Date.now();
-        if (!openShift.checkinTime) {
-          openShift.checkinTime = now - 3600000;
-        }
-
         openShift.checkoutTime = now;
         openShift.type = 'full';
         openShift.status = 'approved';
@@ -1042,21 +1044,19 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
 
         return {
           success: true,
-          message: `🏁 CHECK-OUT THÀNH CÔNG! Đã ghi nhận giờ ra lúc ${format(openShift.checkoutTime, 'HH:mm')}. Ca làm (${openShift.shiftName}) đã được tự động duyệt & tính công!`,
+          message: `🏁 CHECK-OUT THÀNH CÔNG! Đã ghi nhận giờ ra lúc ${format(openShift.checkoutTime, 'HH:mm')}. Ca làm ngày ${workDate} (${openShift.shiftName}) đã được tự động duyệt & tính công!`,
           checkin: openShift,
         };
       } else {
         return {
           success: false,
-          message: `⚠️ Không tìm thấy lịch ca làm của bạn ngày ${workDate}. Vui lòng liên hệ Admin để duyệt thủ công!`,
+          message: `⚠️ Bạn không có ca làm việc nào được Check-in trong ngày hôm nay (${workDate}) để Check-out!`,
         };
       }
     } else {
+      // STRICT SAME-DATE CHECKIN: Search ONLY for shifts registered on workDate (today)
       let openShift = allUserCheckins.find(c => c.workDate === workDate && !c.checkoutTime) 
-        || allUserCheckins.find(c => c.workDate === workDate)
-        || allUserCheckins.find(c => !c.checkinTime)
-        || allUserCheckins.find(c => !c.checkoutTime)
-        || (allUserCheckins.length > 0 ? allUserCheckins[0] : undefined);
+        || allUserCheckins.find(c => c.workDate === workDate);
       
       let checkin = openShift;
       if (!checkin) {
@@ -1106,7 +1106,7 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
 
       return {
         success: true,
-        message: `📍 CHECK-IN THÀNH CÔNG! Đã ghi nhận giờ vào lúc ${format(checkin.checkinTime, 'HH:mm')}. Hãy nhớ quét CHECK-OUT khi ra về để được tự động duyệt & tính công!`,
+        message: `📍 CHECK-IN THÀNH CÔNG! Đã ghi nhận giờ vào lúc ${format(checkin.checkinTime, 'HH:mm')} ngày ${workDate}. Hãy nhớ quét CHECK-OUT khi ra về để được tự động duyệt & tính công!`,
         checkin,
       };
     }

@@ -46,6 +46,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       const local = getLocalSession();
       if (local) {
         setCurrentUser(local);
+        // Always refresh latest user profile from Cloud Supabase to prevent stale mobile cache
+        if (isSupabaseActive()) {
+          try {
+            const users = await fetchAllUsers();
+            const found = users.find(u => 
+              u.id === local.id || 
+              (u.email && local.email && u.email.toLowerCase() === local.email.toLowerCase())
+            );
+            if (found) {
+              setCurrentUser(found);
+              setLocalSession(found);
+            }
+          } catch (e) {
+            console.warn("Notice syncing mobile profile from cloud:", e);
+          }
+        }
         setLoading(false);
         return;
       }
@@ -57,8 +73,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
           const found = users.find(u => u.id === session.user.id);
           if (found) {
             setCurrentUser(found);
+            setLocalSession(found);
           } else {
-            setCurrentUser({
+            const newUser: User = {
               id: session.user.id,
               role: 'tnv',
               fullName: session.user.email?.split('@')[0] || 'TNV User',
@@ -68,7 +85,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               salaryRate: 50000,
               createdAt: Date.now(),
               updatedAt: Date.now(),
-            });
+            };
+            setCurrentUser(newUser);
+            setLocalSession(newUser);
           }
         } else {
           setCurrentUser(null);
