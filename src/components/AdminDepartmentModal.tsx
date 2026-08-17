@@ -1,5 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { getDepartmentsList, getDepartmentRates, saveDepartmentsAndRates } from '../services/dataService';
+import { 
+  getDepartmentsList, 
+  fetchDepartmentsListAsync, 
+  getDepartmentRates, 
+  saveDepartmentsAndRatesAsync 
+} from '../services/dataService';
 
 interface AdminDepartmentModalProps {
   isOpen: boolean;
@@ -8,28 +13,28 @@ interface AdminDepartmentModalProps {
 }
 
 export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: AdminDepartmentModalProps) {
-  const [departments, setDepartments] = useState<string[]>([]);
+  const [departments, setDepartments] = useState<string[]>(getDepartmentsList());
   const [rates, setRates] = useState<Record<string, number>>({});
   const [newDepName, setNewDepName] = useState('');
   const [newDepRate, setNewDepRate] = useState<number>(50000);
 
   useEffect(() => {
     if (isOpen) {
-      setDepartments(getDepartmentsList());
+      fetchDepartmentsListAsync().then(deps => setDepartments(deps));
       setRates(getDepartmentRates());
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
-  const handleRateChange = (depName: string, rate: number) => {
+  const handleRateChange = async (depName: string, rate: number) => {
     const updatedRates = { ...rates, [depName]: rate };
     setRates(updatedRates);
-    saveDepartmentsAndRates(departments, updatedRates);
+    await saveDepartmentsAndRatesAsync(departments, updatedRates);
     onSaved();
   };
 
-  const handleAdd = (e: React.FormEvent) => {
+  const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newDepName.trim();
     if (name && !departments.includes(name)) {
@@ -37,14 +42,14 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
       const updatedRates = { ...rates, [name]: Number(newDepRate) || 50000 };
       setDepartments(updatedDeps);
       setRates(updatedRates);
-      saveDepartmentsAndRates(updatedDeps, updatedRates);
+      await saveDepartmentsAndRatesAsync(updatedDeps, updatedRates);
       setNewDepName('');
       setNewDepRate(50000);
       onSaved();
     }
   };
 
-  const handleDelete = (depName: string) => {
+  const handleDelete = async (depName: string) => {
     if (departments.length <= 1) {
       alert("Phải giữ lại ít nhất 1 bộ phận trong hệ thống!");
       return;
@@ -54,7 +59,7 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
     delete updatedRates[depName];
     setDepartments(updatedDeps);
     setRates(updatedRates);
-    saveDepartmentsAndRates(updatedDeps, updatedRates);
+    await saveDepartmentsAndRatesAsync(updatedDeps, updatedRates);
     onSaved();
   };
 

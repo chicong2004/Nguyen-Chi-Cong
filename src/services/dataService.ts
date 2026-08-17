@@ -365,32 +365,44 @@ export function saveDepartmentsList(deps: string[]) {
   saveDepartmentsAndRates(deps, getDepartmentRates());
 }
 
-export function saveDepartmentsAndRates(deps: string[], rates?: Record<string, number>) {
+export async function saveDepartmentsAndRatesAsync(deps: string[], rates?: Record<string, number>): Promise<void> {
   const currentRates = rates || getDepartmentRates();
   localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(deps));
   localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(currentRates));
 
   if (isSupabaseActive()) {
-    // 1. Write to system_settings table
-    supabase.from('system_settings').upsert([
-      { key: 'departments', value: deps, updated_at: Date.now() },
-      { key: 'rates', value: currentRates, updated_at: Date.now() }
-    ]).then(({ error }) => {
-      if (error) {
-        // Fallback to legacy row
-        const events = getEventsList();
-        const payloadStr = JSON.stringify({ deps, rates: currentRates, events });
-        supabase.from('users').upsert({
-          id: SYSTEM_DEPTS_ID,
-          role: 'admin',
-          full_name: '__SYSTEM_DEPARTMENTS__',
-          phone: '0000000000',
-          department: payloadStr,
-          salary_rate: 0,
-        });
-      }
-    }).catch(err => console.warn("Supabase depts sync notice:", err));
+    try {
+      // 1. Write to system_settings table for new architecture
+      await supabase.from('system_settings').upsert({
+        key: 'departments',
+        value: deps,
+        updated_at: Date.now(),
+      });
+      await supabase.from('system_settings').upsert({
+        key: 'rates',
+        value: currentRates,
+        updated_at: Date.now(),
+      });
+
+      // 2. ALSO Write to legacy SYSTEM_DEPTS_ID row in users table for 100% backward compatibility
+      const events = getEventsList();
+      const payloadStr = JSON.stringify({ deps, rates: currentRates, events });
+      await supabase.from('users').upsert({
+        id: SYSTEM_DEPTS_ID,
+        role: 'admin',
+        full_name: '__SYSTEM_DEPARTMENTS__',
+        phone: '0000000000',
+        department: payloadStr,
+        salary_rate: 0,
+      });
+    } catch (err) {
+      console.warn("Supabase depts sync notice:", err);
+    }
   }
+}
+
+export function saveDepartmentsAndRates(deps: string[], rates?: Record<string, number>) {
+  saveDepartmentsAndRatesAsync(deps, rates).catch(err => console.error("Error saving departments and rates:", err));
 }
 
 export function getStorageMode(): 'local' | 'cloud' {
