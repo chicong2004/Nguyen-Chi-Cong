@@ -175,13 +175,15 @@ export default function AdminDashboard() {
   // Metrics
   const totalApprovedCheckins = checkins.filter(c => c.status === 'approved').length;
   const totalPendingCheckins = checkins.filter(c => c.status === 'pending').length;
-  const totalPayroll = checkins
+  const totalApprovedShiftsPay = checkins
     .filter(c => c.status === 'approved')
     .reduce((sum, c) => {
       const user = users.find(u => u.id === c.userId);
       const rate = user?.salaryRate || 50000;
       return sum + calculateShiftPay(c.shiftName, rate, c.otHours);
     }, 0);
+  const totalAdjustments = users.reduce((sum, u) => sum + (u.adjustmentAmount || 0), 0);
+  const totalPayroll = totalApprovedShiftsPay + totalAdjustments;
 
   const [selectedMealDate, setSelectedMealDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
@@ -299,6 +301,8 @@ export default function AdminDashboard() {
       'Link Facebook / Zalo': user.facebookLink || '',
       'Bộ phận': user.department,
       'Mức phụ cấp/ca (VND)': user.salaryRate || 50000,
+      'Cộng/Trừ tiền điều chỉnh (VND)': user.adjustmentAmount || 0,
+      'Lý do cộng/trừ': user.adjustmentNote || '',
       'Ghi chú / Khung rảnh': user.notes || '',
       'Ngày đăng ký': format(user.createdAt, 'dd/MM/yyyy HH:mm'),
     }));
@@ -318,7 +322,10 @@ export default function AdminDashboard() {
       const userCheckins = checkins.filter(c => c.userId === user.id && c.status === 'approved');
       const approvedShifts = userCheckins.length;
       const totalOT = userCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);
-      const totalSalary = userCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, user.salaryRate, c.otHours), 0);
+      const shiftSalary = userCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, user.salaryRate, c.otHours), 0);
+      const adjustmentAmount = user.adjustmentAmount || 0;
+      const totalSalary = shiftSalary + adjustmentAmount;
+
       // Gom nhóm ca làm đã duyệt theo từng ngày làm việc để tính đúng suất ăn (1 người/ngày = 1 suất trưa; có OT tối = +1 suất tối)
       const dateMap = new Map<string, Checkin[]>();
       userCheckins.forEach(c => {
@@ -345,7 +352,10 @@ export default function AdminDashboard() {
         'Suất ăn trưa': lunchMeals,
         'Suất ăn tối': dinnerMeals,
         'Tổng suất ăn': lunchMeals + dinnerMeals,
-        'Tổng phụ cấp nhận (VND)': totalSalary,
+        'Lương ca + OT (VND)': shiftSalary,
+        'Cộng/Trừ tiền thưởng phạt (VND)': adjustmentAmount,
+        'Lý do cộng/trừ': user.adjustmentNote || '',
+        'Tổng phụ cấp thực nhận (VND)': totalSalary,
       };
     });
 

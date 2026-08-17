@@ -8,7 +8,8 @@ import {
   calculateShiftPay,
   getDepartmentsList,
   getEventsList,
-  getDepartmentRate
+  getDepartmentRate,
+  updateUserProfileByAdmin
 } from '../services/dataService';
 import { format } from 'date-fns';
 
@@ -22,6 +23,9 @@ interface AdminUserDetailModalProps {
 
 export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, onDataChanged }: AdminUserDetailModalProps) {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
+  const [isEditingAdjustment, setIsEditingAdjustment] = useState(false);
+  const [adjAmountInput, setAdjAmountInput] = useState<number>(user?.adjustmentAmount || 0);
+  const [adjNoteInput, setAdjNoteInput] = useState<string>(user?.adjustmentNote || '');
   
   // Shift Edit Form State
   const [editWorkDate, setEditWorkDate] = useState('');
@@ -38,9 +42,19 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
     (c.fullName && user.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())
   ).sort((a, b) => b.createdAt - a.createdAt);
   const approvedCheckins = userCheckins.filter(c => c.status === 'approved');
-  const totalSalary = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName || '', user.salaryRate, c.otHours), 0);
+  const approvedShiftPay = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName || '', user.salaryRate, c.otHours), 0);
+  const totalSalary = approvedShiftPay + (user.adjustmentAmount || 0);
   const departments = getDepartmentsList();
   const events = getEventsList();
+
+  const handleSaveAdjustment = async () => {
+    await updateUserProfileByAdmin(user.id, {
+      adjustmentAmount: Number(adjAmountInput),
+      adjustmentNote: adjNoteInput,
+    });
+    setIsEditingAdjustment(false);
+    onDataChanged();
+  };
 
   const handleStartEditShift = (shift: Checkin) => {
     setEditingShiftId(shift.id);
@@ -119,19 +133,93 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
         </div>
 
         {/* Financial Stat Banner */}
-        <div className="grid grid-cols-3 gap-2 my-4 bg-gray-50 p-3 rounded-2xl border border-gray-200 text-center">
-          <div>
-            <span className="text-[11px] text-gray-500 font-medium block">Số ca đã duyệt</span>
-            <span className="text-lg font-black text-emerald-600">{approvedCheckins.length} ca</span>
+        <div className="my-4 bg-gradient-to-r from-blue-50/80 via-purple-50/50 to-emerald-50/80 p-3.5 rounded-2xl border border-blue-200">
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
+            <div>
+              <span className="text-[11px] text-gray-500 font-medium block">Số ca đã duyệt</span>
+              <span className="text-base font-black text-emerald-600">{approvedCheckins.length} ca</span>
+            </div>
+            <div>
+              <span className="text-[11px] text-gray-500 font-medium block">Mức lương cơ bản</span>
+              <span className="text-base font-black text-gray-800">{(user.salaryRate || 50000).toLocaleString()}đ/ca</span>
+            </div>
+            <div>
+              <span className="text-[11px] text-gray-500 font-medium block">Cộng/Trừ thưởng phạt</span>
+              <span className={`text-base font-black ${
+                (user.adjustmentAmount || 0) > 0 
+                  ? 'text-emerald-600' 
+                  : (user.adjustmentAmount || 0) < 0 
+                    ? 'text-red-600' 
+                    : 'text-gray-500'
+              }`}>
+                {(user.adjustmentAmount || 0) > 0 ? `+${user.adjustmentAmount?.toLocaleString()}đ` : `${(user.adjustmentAmount || 0).toLocaleString()}đ`}
+              </span>
+            </div>
+            <div>
+              <span className="text-[11px] text-gray-500 font-medium block">Tổng thù lao nhận</span>
+              <span className="text-base font-black text-blue-700">{totalSalary.toLocaleString()} VND</span>
+            </div>
           </div>
-          <div>
-            <span className="text-[11px] text-gray-500 font-medium block">Mức lương cơ bản</span>
-            <span className="text-lg font-black text-gray-800">{(user.salaryRate || 50000).toLocaleString()}đ/ca</span>
+
+          {/* Quick Edit Adjustment Button & Note */}
+          <div className="mt-2.5 pt-2 border-t border-gray-200 flex items-center justify-between text-xs">
+            <div className="text-purple-900 font-semibold truncate pr-2">
+              📝 Lý do thưởng/trừ: <span className="font-bold text-gray-800">{user.adjustmentNote || '(Chưa có ghi chú)'}</span>
+            </div>
+            <button
+              onClick={() => {
+                setAdjAmountInput(user.adjustmentAmount || 0);
+                setAdjNoteInput(user.adjustmentNote || '');
+                setIsEditingAdjustment(!isEditingAdjustment);
+              }}
+              className="px-2.5 py-1 bg-purple-600 text-white rounded-lg font-bold text-[11px] hover:bg-purple-700 transition shrink-0"
+            >
+              {isEditingAdjustment ? '✕ Đóng' : '✏️ Chỉnh Số Tiền Thưởng/Phạt'}
+            </button>
           </div>
-          <div>
-            <span className="text-[11px] text-gray-500 font-medium block">Tổng phụ cấp nhận</span>
-            <span className="text-lg font-black text-blue-600">{totalSalary.toLocaleString()} VND</span>
-          </div>
+
+          {/* Inline Adjustment Edit Form */}
+          {isEditingAdjustment && (
+            <div className="mt-3 p-3 bg-white rounded-xl border border-purple-300 shadow-sm space-y-2">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Số tiền cộng (+)/trừ (-):</label>
+                  <input
+                    type="number"
+                    step={5000}
+                    value={adjAmountInput}
+                    onChange={(e) => setAdjAmountInput(Number(e.target.value))}
+                    placeholder="VD: 50000 hoặc -20000"
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded-lg text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Lý do chi tiết:</label>
+                  <input
+                    type="text"
+                    value={adjNoteInput}
+                    onChange={(e) => setAdjNoteInput(e.target.value)}
+                    placeholder="VD: Thưởng làm xuất sắc..."
+                    className="w-full px-2.5 py-1.5 border border-purple-300 rounded-lg text-xs outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  onClick={() => setIsEditingAdjustment(false)}
+                  className="px-3 py-1 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg"
+                >
+                  Hủy
+                </button>
+                <button
+                  onClick={handleSaveAdjustment}
+                  className="px-4 py-1 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 shadow-xs"
+                >
+                  💾 Lưu tiền thưởng/trừ
+                </button>
+              </div>
+            </div>
+          )}
         </div>
 
         {/* List of Registered Shifts */}

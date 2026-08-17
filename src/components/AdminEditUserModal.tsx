@@ -16,6 +16,8 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
   const [department, setDepartment] = useState('Hậu cần');
   const [depsList, setDepsList] = useState<string[]>(getDepartmentsList());
   const [salaryRate, setSalaryRate] = useState<number>(50000);
+  const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
+  const [adjustmentNote, setAdjustmentNote] = useState('');
   const [facebookLink, setFacebookLink] = useState('');
   const [notes, setNotes] = useState('');
 
@@ -30,6 +32,8 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
       setPhone(user.phone || '');
       setDepartment(user.department || 'Hậu cần');
       setSalaryRate(user.salaryRate || 50000);
+      setAdjustmentAmount(user.adjustmentAmount || 0);
+      setAdjustmentNote(user.adjustmentNote || '');
       setFacebookLink(user.facebookLink || '');
       setNotes(user.notes || '');
     }
@@ -49,6 +53,8 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
         phone,
         department,
         salaryRate: Number(salaryRate),
+        adjustmentAmount: Number(adjustmentAmount),
+        adjustmentNote,
         facebookLink,
         notes,
       });
@@ -76,7 +82,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
           ✏️ Chỉnh Sửa Đăng Ký & Mức Lương TNV
         </h3>
         <p className="text-xs text-gray-500 mb-4">
-          Quyền Admin: Cập nhật thông tin cá nhân, chuyển bộ phận và điều chỉnh phụ cấp ca.
+          Quyền Admin: Cập nhật thông tin cá nhân, chuyển bộ phận và điều chỉnh phụ cấp ca/thưởng phạt.
         </p>
 
         {error && <div className="p-3 mb-4 text-xs text-red-600 bg-red-50 rounded-xl">{error}</div>}
@@ -143,6 +149,45 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
                 required
                 className="w-full px-3 py-2 border border-emerald-300 bg-emerald-50/40 rounded-xl text-sm font-bold text-emerald-800 outline-none focus:ring-2 focus:ring-emerald-500"
               />
+            </div>
+          </div>
+
+          {/* Financial Adjustment Section (Plus/Minus & Reasons) */}
+          <div className="p-3 bg-purple-50/70 border border-purple-200 rounded-2xl space-y-3">
+            <h4 className="text-xs font-bold text-purple-900 flex items-center justify-between">
+              <span>➕➖ Điều Chỉnh Thưởng / Phạt / Phụ Cấp Thêm</span>
+              <span className="text-[10px] text-purple-700 font-normal">Nhập số dương (+) cộng, số âm (-) trừ</span>
+            </h4>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div>
+                <label className="block text-[11px] font-bold text-purple-900 mb-1">Số tiền cộng/trừ (VND):</label>
+                <input
+                  type="number"
+                  step={5000}
+                  value={adjustmentAmount}
+                  onChange={(e) => setAdjustmentAmount(Number(e.target.value))}
+                  placeholder="VD: 50000 hoặc -20000"
+                  className={`w-full px-3 py-2 border rounded-xl text-sm font-black outline-none focus:ring-2 focus:ring-purple-500 bg-white ${
+                    adjustmentAmount > 0 
+                      ? 'text-emerald-700 border-emerald-400' 
+                      : adjustmentAmount < 0 
+                        ? 'text-red-600 border-red-400' 
+                        : 'text-gray-700 border-purple-300'
+                  }`}
+                />
+              </div>
+
+              <div>
+                <label className="block text-[11px] font-bold text-purple-900 mb-1">Lý do chi tiết cộng/trừ:</label>
+                <input
+                  type="text"
+                  value={adjustmentNote}
+                  onChange={(e) => setAdjustmentNote(e.target.value)}
+                  placeholder="VD: Thưởng làm xuất sắc, Trừ tạm ứng..."
+                  className="w-full px-3 py-2 border border-purple-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500 bg-white"
+                />
+              </div>
             </div>
           </div>
 

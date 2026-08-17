@@ -23,6 +23,8 @@ export interface User {
   eventName?: string;
   notes?: string;
   salaryRate: number; // VND / ca (Chỉ Admin mới có quyền sửa)
+  adjustmentAmount?: number; // Số tiền cộng (+) thưởng/phụ cấp hoặc trừ (-) phạt/tạm ứng
+  adjustmentNote?: string; // Lý do chi tiết cộng/trừ tiền
   createdAt: number;
   updatedAt: number;
 }

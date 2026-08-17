@@ -194,9 +194,11 @@ export default function TNVDashboard() {
 
   const approvedShifts = checkins.filter(c => c.status === 'approved').length;
   const pendingShifts = checkins.filter(c => c.status === 'pending').length;
-  const estimatedEarned = checkins
+  const approvedShiftPay = checkins
     .filter(c => c.status === 'approved')
     .reduce((sum, c) => sum + calculateShiftPay(c.shiftName, activeProfile.salaryRate, c.otHours), 0);
+  const adjustmentAmount = activeProfile.adjustmentAmount || 0;
+  const estimatedEarned = approvedShiftPay + adjustmentAmount;
 
   return (
     <div className="max-w-xl mx-auto min-h-screen bg-gray-50 flex flex-col pb-12 text-gray-900">
@@ -237,7 +239,13 @@ export default function TNVDashboard() {
           <div className="bg-white p-4 rounded-2xl border border-gray-100 shadow-2xs">
             <span className="text-xs text-gray-500 font-medium">Thu nhập tích luỹ tổng</span>
             <div className="text-2xl font-black text-blue-600 mt-1">{estimatedEarned.toLocaleString()} <span className="text-xs font-normal">VND</span></div>
-            <span className="text-[11px] text-amber-600 font-bold">{pendingShifts} ca chờ duyệt</span>
+            {adjustmentAmount !== 0 ? (
+              <span className={`text-[10px] font-bold block truncate mt-0.5 ${adjustmentAmount > 0 ? 'text-emerald-700' : 'text-red-600'}`}>
+                {adjustmentAmount > 0 ? `+${adjustmentAmount.toLocaleString()}đ` : `${adjustmentAmount.toLocaleString()}đ`} ({activeProfile.adjustmentNote || 'Điều chỉnh'})
+              </span>
+            ) : (
+              <span className="text-[11px] text-amber-600 font-bold">{pendingShifts} ca chờ duyệt</span>
+            )}
           </div>
         </div>
 

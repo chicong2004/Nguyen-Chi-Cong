@@ -572,7 +572,8 @@ export async function syncToGoogleSheets(customUsers?: User[], customCheckins?: 
 
     const enrichedUsers = users.map(u => {
       const approved = checkins.filter(c => c.userId === u.id && c.status === 'approved');
-      const totalEarned = approved.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, u.salaryRate, c.otHours), 0);
+      const approvedShiftPay = approved.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, u.salaryRate, c.otHours), 0);
+      const totalEarned = approvedShiftPay + (u.adjustmentAmount || 0);
       return {
         ...u,
         totalEarned,
@@ -620,6 +621,8 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     event_id: user.eventId || null,
     event_name: user.eventName || null,
     salary_rate: user.salaryRate || 50000,
+    adjustment_amount: user.adjustmentAmount || 0,
+    adjustment_note: user.adjustmentNote || '',
     notes: user.notes || '',
     updated_at: user.updatedAt || Date.now(),
   };
@@ -847,6 +850,8 @@ export async function fetchAllUsers(): Promise<User[]> {
           eventName: d.event_name || d.eventName || '',
           notes: d.notes || '',
           salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
+          adjustmentAmount: Number(d.adjustment_amount || d.adjustmentAmount) || 0,
+          adjustmentNote: d.adjustment_note || d.adjustmentNote || '',
           createdAt: safeParseTimestamp(d.created_at || d.createdAt),
           updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
         }));
@@ -1236,6 +1241,8 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     if (data.department !== undefined) user.department = data.department;
     if (data.notes !== undefined) user.notes = data.notes;
     if (data.salaryRate !== undefined) user.salaryRate = data.salaryRate;
+    if (data.adjustmentAmount !== undefined) user.adjustmentAmount = data.adjustmentAmount;
+    if (data.adjustmentNote !== undefined) user.adjustmentNote = data.adjustmentNote;
     user.updatedAt = Date.now();
     saveLocalUsers(users);
   }
@@ -1251,7 +1258,7 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     saveLocalCheckins(checkins);
   }
 
-  await triggerCloudSync();
+  triggerCloudSync();
 
   if (isSupabaseActive() && isValidUUID(userId)) {
     try {
@@ -1263,6 +1270,8 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
       if (data.department !== undefined) updatePayload.department = data.department;
       if (data.notes !== undefined) updatePayload.notes = data.notes;
       if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
+      if (data.adjustmentAmount !== undefined) updatePayload.adjustment_amount = data.adjustmentAmount;
+      if (data.adjustmentNote !== undefined) updatePayload.adjustment_note = data.adjustmentNote;
       await supabase.from('users').update(updatePayload).eq('id', userId);
     } catch (e) {
       console.warn("Supabase update profile notice:", e);
