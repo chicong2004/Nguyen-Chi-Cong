@@ -93,26 +93,22 @@ CREATE POLICY "Public access for departments" ON departments FOR ALL USING (true
 DROP POLICY IF EXISTS "Public access for system_settings" ON system_settings;
 CREATE POLICY "Public access for system_settings" ON system_settings FOR ALL USING (true) WITH CHECK (true);
 
--- 6. Enable Realtime Publications for WebSocket Subscriptions (Safe Re-run)
+-- 6. Enable Realtime Publications safely by checking pg_publication_tables catalog
 DO $$
 BEGIN
-  BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'users') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE users;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
+  END IF;
 
-  BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'checkins') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE checkins;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
+  END IF;
 
-  BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'departments') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE departments;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
+  END IF;
 
-  BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_publication_tables WHERE pubname = 'supabase_realtime' AND tablename = 'system_settings') THEN
     ALTER PUBLICATION supabase_realtime ADD TABLE system_settings;
-  EXCEPTION WHEN duplicate_object THEN NULL;
-  END;
+  END IF;
 END $$;
