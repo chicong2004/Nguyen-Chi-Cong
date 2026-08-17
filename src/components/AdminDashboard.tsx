@@ -733,7 +733,7 @@ export default function AdminDashboard() {
                             <td className="px-4 py-3 align-middle">
                               <select
                                 value={user.department}
-                                onChange={(e) => handleInlineDepartmentChange(user.id, e.target.value)}
+                                onChange={(e) => handleDepartmentChangeInline(user.id, e.target.value)}
                                 className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white font-bold text-gray-800 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
                               >
                                 {departmentsList.map(dep => (

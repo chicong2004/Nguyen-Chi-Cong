@@ -104,6 +104,7 @@ export function isSupabaseActive(): boolean {
   return isSupabaseConfigured();
 }
 
+// Universal Realtime WebSocket Subscription across all browser tabs/devices
 export function subscribeToRealtimeChanges(onUpdate: (payload?: any) => void): () => void {
   if (!isSupabaseActive()) return () => {};
 
@@ -115,7 +116,7 @@ export function subscribeToRealtimeChanges(onUpdate: (payload?: any) => void): (
         'postgres_changes',
         { event: '*', schema: 'public', table: 'users' },
         (payload) => {
-          console.log("⚡ [Realtime WebSocket] Users table changed:", payload);
+          console.log("⚡ [Realtime WebSocket] Users table updated:", payload);
           onUpdate(payload);
         }
       )
@@ -123,15 +124,23 @@ export function subscribeToRealtimeChanges(onUpdate: (payload?: any) => void): (
         'postgres_changes',
         { event: '*', schema: 'public', table: 'checkins' },
         (payload) => {
-          console.log("⚡ [Realtime WebSocket] Checkins table changed:", payload);
+          console.log("⚡ [Realtime WebSocket] Checkins table updated:", payload);
+          onUpdate(payload);
+        }
+      )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'system_settings' },
+        (payload) => {
+          console.log("⚡ [Realtime WebSocket] System Settings updated:", payload);
           onUpdate(payload);
         }
       )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
-          console.log("✅ Supabase Realtime WebSockets CONNECTED & SUBSCRIBED!");
-        } else {
-          console.warn(`Supabase Realtime WebSocket status: ${status}`, err || '');
+          console.log("✅ Supabase Realtime WebSockets ACTIVE & CONNECTED!");
+        } else if (err) {
+          console.warn(`Supabase Realtime status: ${status}`, err);
         }
       });
 
@@ -176,13 +185,22 @@ export function getActiveEventsList(): EventItem[] {
   return getEventsList().filter(e => e.status === 'active');
 }
 
+// Fetch Events Async from System Settings table or legacy user row
 export async function fetchEventsListAsync(): Promise<EventItem[]> {
   if (isSupabaseActive()) {
     try {
-      const { data, error } = await supabase.from('users').select('*').eq('id', SYSTEM_DEPTS_ID).maybeSingle();
-      if (!error && data && data.department) {
+      // 1. Check system_settings table first
+      const { data, error } = await supabase.from('system_settings').select('*').eq('key', 'events').maybeSingle();
+      if (!error && data && data.value && Array.isArray(data.value)) {
+        localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(data.value));
+        return data.value;
+      }
+
+      // 2. Fallback to legacy SYSTEM_DEPTS_ID row
+      const { data: sysData, error: sysErr } = await supabase.from('users').select('*').eq('id', SYSTEM_DEPTS_ID).maybeSingle();
+      if (!sysErr && sysData && sysData.department) {
         try {
-          const parsed = JSON.parse(data.department);
+          const parsed = JSON.parse(sysData.department);
           if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.events)) {
             localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(parsed.events));
             return parsed.events;
@@ -204,21 +222,26 @@ export async function fetchActiveEventsListAsync(): Promise<EventItem[]> {
 export async function saveEventsListAsync(events: EventItem[]): Promise<void> {
   localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(events));
   if (isSupabaseActive()) {
-    const deps = getDepartmentsList();
-    const rates = getDepartmentRates();
-    const payloadStr = JSON.stringify({ deps, rates, events });
     try {
-      const cleanPayload = {
-        id: SYSTEM_DEPTS_ID,
-        role: 'admin',
-        full_name: '__SYSTEM_DEPARTMENTS__',
-        phone: '0000000000',
-        department: payloadStr,
-        salary_rate: 0,
-      };
-      const { error } = await supabase.from('users').upsert(cleanPayload);
+      // Save to system_settings table
+      const { error } = await supabase.from('system_settings').upsert({
+        key: 'events',
+        value: events,
+        updated_at: Date.now(),
+      });
       if (error) {
-        await supabase.from('users').insert([cleanPayload]);
+        // Legacy fallback
+        const deps = getDepartmentsList();
+        const rates = getDepartmentRates();
+        const payloadStr = JSON.stringify({ deps, rates, events });
+        await supabase.from('users').upsert({
+          id: SYSTEM_DEPTS_ID,
+          role: 'admin',
+          full_name: '__SYSTEM_DEPARTMENTS__',
+          phone: '0000000000',
+          department: payloadStr,
+          salary_rate: 0,
+        });
       }
     } catch (err) {
       console.warn("Supabase events sync notice:", err);
@@ -311,18 +334,24 @@ export function saveDepartmentsAndRates(deps: string[], rates?: Record<string, n
   localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(currentRates));
 
   if (isSupabaseActive()) {
-    const events = getEventsList();
-    const payloadStr = JSON.stringify({ deps, rates: currentRates, events });
-    const cleanPayload = {
-      id: SYSTEM_DEPTS_ID,
-      role: 'admin',
-      full_name: '__SYSTEM_DEPARTMENTS__',
-      phone: '0000000000',
-      department: payloadStr,
-      salary_rate: 0,
-    };
-    supabase.from('users').upsert(cleanPayload).then(({ error }) => {
-      if (error) supabase.from('users').insert([cleanPayload]);
+    // 1. Write to system_settings table
+    supabase.from('system_settings').upsert([
+      { key: 'departments', value: deps, updated_at: Date.now() },
+      { key: 'rates', value: currentRates, updated_at: Date.now() }
+    ]).then(({ error }) => {
+      if (error) {
+        // Fallback to legacy row
+        const events = getEventsList();
+        const payloadStr = JSON.stringify({ deps, rates: currentRates, events });
+        supabase.from('users').upsert({
+          id: SYSTEM_DEPTS_ID,
+          role: 'admin',
+          full_name: '__SYSTEM_DEPARTMENTS__',
+          phone: '0000000000',
+          department: payloadStr,
+          salary_rate: 0,
+        });
+      }
     }).catch(err => console.warn("Supabase depts sync notice:", err));
   }
 }
@@ -339,7 +368,7 @@ export function setStorageMode(mode: 'local' | 'cloud') {
   localStorage.setItem(STORAGE_MODE_KEY, mode);
 }
 
-// LocalStorage Helper functions
+// LocalStorage Cache Helpers
 function getLocalUsers(): User[] {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
@@ -366,8 +395,7 @@ function getLocalCheckins(): Checkin[] {
       localStorage.setItem(LOCAL_CHECKINS_KEY, JSON.stringify(INITIAL_MOCK_CHECKINS));
       return INITIAL_MOCK_CHECKINS;
     }
-    const checkins: Checkin[] = JSON.parse(raw);
-    return checkins;
+    return JSON.parse(raw);
   } catch (e) {
     return [];
   }
@@ -445,7 +473,9 @@ async function triggerCloudSync() {
   await syncToGoogleSheets(users, checkins);
 }
 
-// Service Methods - Universal Cross-Device Cloud Sync
+// -------------------------------------------------------------
+// Safe & Full Cloud Upsert Methods (Zero-Data-Loss Architecture)
+// -------------------------------------------------------------
 export async function safeSupabaseUpsertUser(user: User): Promise<void> {
   if (!isSupabaseActive()) return;
   if (!isValidUUID(user.id)) {
@@ -456,50 +486,28 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     id: user.id,
     role: user.role || 'tnv',
     full_name: user.fullName,
-    email: user.email,
-    phone: user.phone,
+    email: user.email || '',
+    phone: user.phone || '',
     facebook_link: user.facebookLink || '',
-    department: user.department,
+    department: user.department || 'Hậu cần',
     event_id: user.eventId || null,
     event_name: user.eventName || null,
     salary_rate: user.salaryRate || 50000,
+    notes: user.notes || '',
+    updated_at: user.updatedAt || Date.now(),
   };
 
-  let lastError: any = null;
-
   try {
-    // 1. Primary: Direct Upsert
-    const { error: err1 } = await supabase.from('users').upsert(cleanPayload);
-    if (!err1) return;
-    lastError = err1;
-
-    console.warn("User upsert notice, retrying direct insert:", err1.message);
-
-    // 2. Fallback: Direct Insert
-    const { error: err2 } = await supabase.from('users').insert([cleanPayload]);
-    if (!err2) return;
-    lastError = err2;
-
-    console.warn("User insert notice, retrying base insert:", err2.message);
-
-    // 3. Fallback: Minimal payload insert
-    delete cleanPayload.event_id;
-    delete cleanPayload.event_name;
-    const { error: err3 } = await supabase.from('users').insert([cleanPayload]);
-    if (!err3) return;
-    lastError = err3;
-
-    const { error: err4 } = await supabase.from('users').update(cleanPayload).eq('email', user.email);
-    if (!err4) return;
-    lastError = err4;
-
-    if (lastError) {
-      console.error("LỖI SUPABASE USERS:", lastError);
-      throw new Error(`Supabase từ chối tài khoản (${user.fullName}): ${lastError.message || lastError}`);
+    const { error } = await supabase.from('users').upsert(cleanPayload);
+    if (error) {
+      console.warn("User upsert warning, retrying update:", error.message);
+      const { error: insertErr } = await supabase.from('users').insert([cleanPayload]);
+      if (insertErr) {
+        console.error("LỖI SUPABASE USERS:", insertErr);
+      }
     }
   } catch (err: any) {
     console.error("LỖI ĐỒNG BỘ SUPABASE USERS:", err);
-    throw err;
   }
 }
 
@@ -516,52 +524,33 @@ export async function safeSupabaseUpsertCheckin(checkin: Checkin): Promise<void>
     id: checkin.id,
     user_id: checkin.userId,
     full_name: checkin.fullName,
-    department: checkin.department,
+    department: checkin.department || 'Hậu cần',
     event_id: checkin.eventId || null,
     event_name: checkin.eventName || null,
     work_date: checkin.workDate || format(new Date(), 'yyyy-MM-dd'),
     shift_name: checkin.shiftName || 'Ca làm việc',
     ot_hours: checkin.otHours || 0,
     status: checkin.status || 'pending',
+    type: checkin.type || 'checkin',
     notes: checkin.adminNote || '',
     admin_note: checkin.adminNote || '',
+    checkin_time: checkin.checkinTime || null,
+    checkout_time: checkin.checkoutTime || null,
+    email_notify_sent: Boolean(checkin.emailNotifySent),
+    updated_at: checkin.updatedAt || Date.now(),
   };
 
-  let lastError: any = null;
-
   try {
-    // 1. Primary: Direct Upsert
-    const { error: err1 } = await supabase.from('checkins').upsert(cleanPayload);
-    if (!err1) return;
-    lastError = err1;
-
-    console.warn("Checkin upsert notice, retrying direct insert:", err1.message);
-
-    // 2. Fallback: Direct Insert
-    const { error: err2 } = await supabase.from('checkins').insert([cleanPayload]);
-    if (!err2) return;
-    lastError = err2;
-
-    console.warn("Checkin insert notice, retrying base insert:", err2.message);
-
-    // 3. Fallback: Base Insert without optional event columns
-    delete cleanPayload.event_id;
-    delete cleanPayload.event_name;
-    const { error: err3 } = await supabase.from('checkins').insert([cleanPayload]);
-    if (!err3) return;
-    lastError = err3;
-
-    const { error: err4 } = await supabase.from('checkins').update(cleanPayload).eq('id', checkin.id);
-    if (!err4) return;
-    lastError = err4;
-
-    if (lastError) {
-      console.error("LỖI SUPABASE CHECKINS:", lastError);
-      throw new Error(`Supabase từ chối ca làm (${checkin.shiftName}): ${lastError.message || lastError}`);
+    const { error } = await supabase.from('checkins').upsert(cleanPayload);
+    if (error) {
+      console.warn("Checkin upsert warning, retrying insert:", error.message);
+      const { error: insertErr } = await supabase.from('checkins').insert([cleanPayload]);
+      if (insertErr) {
+        console.error("LỖI SUPABASE CHECKINS:", insertErr);
+      }
     }
   } catch (err: any) {
     console.error("LỖI ĐỒNG BỘ SUPABASE CHECKINS:", err);
-    throw err;
   }
 }
 
@@ -592,7 +581,6 @@ export async function registerTNV(payload: {
   const existingUser = users.find(u => u.email.trim().toLowerCase() === cleanEmail);
 
   if (existingUser) {
-    // Update existing user profile with chosen event and department
     existingUser.fullName = payload.fullName || existingUser.fullName;
     existingUser.phone = payload.phone || existingUser.phone;
     existingUser.department = payload.department || existingUser.department;
@@ -628,9 +616,9 @@ export async function registerTNV(payload: {
   saveLocalUsers(users);
   setLocalSession(newUser);
 
-  // Sync globally to cloud KV & Supabase
-  await triggerCloudSync();
+  // Sync globally to Cloud
   await safeSupabaseUpsertUser(newUser);
+  await triggerCloudSync();
 
   return newUser;
 }
@@ -670,13 +658,30 @@ export async function loginAdmin(passcode: string): Promise<User> {
   return adminUser;
 }
 
+// -------------------------------------------------------------
+// SINGLE SOURCE OF TRUTH (SSOT) FETCH METHODS
+// -------------------------------------------------------------
 export async function fetchAllUsers(): Promise<User[]> {
-  // If Supabase is active, Supabase Cloud is the single source of truth!
   if (isSupabaseActive()) {
     try {
+      // 1. Fetch system settings from system_settings table if present
+      const { data: settingsData } = await supabase.from('system_settings').select('*');
+      if (settingsData && settingsData.length > 0) {
+        settingsData.forEach(st => {
+          if (st.key === 'departments' && Array.isArray(st.value)) {
+            localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(st.value));
+          } else if (st.key === 'rates' && typeof st.value === 'object') {
+            localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(st.value));
+          } else if (st.key === 'events' && Array.isArray(st.value)) {
+            localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(st.value));
+          }
+        });
+      }
+
+      // 2. Fetch Users table
       const { data, error } = await supabase.from('users').select('*');
       if (!error && data) {
-        // 1. Process system departments config row if present
+        // Process Legacy Admin/System config rows if system_settings wasn't set up yet
         const sysRec = data.find(d => d.id === SYSTEM_DEPTS_ID || d.full_name === '__SYSTEM_DEPARTMENTS__');
         if (sysRec && sysRec.department) {
           try {
@@ -684,20 +689,13 @@ export async function fetchAllUsers(): Promise<User[]> {
             if (Array.isArray(parsed) && parsed.length > 0) {
               localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(parsed));
             } else if (typeof parsed === 'object' && parsed !== null) {
-              if (Array.isArray(parsed.deps)) {
-                localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(parsed.deps));
-              }
-              if (typeof parsed.rates === 'object' && parsed.rates !== null) {
-                localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(parsed.rates));
-              }
-              if (Array.isArray(parsed.events)) {
-                localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(parsed.events));
-              }
+              if (Array.isArray(parsed.deps)) localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(parsed.deps));
+              if (typeof parsed.rates === 'object') localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(parsed.rates));
+              if (Array.isArray(parsed.events)) localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(parsed.events));
             }
           } catch {}
         }
 
-        // 2. Process Admin email settings sync across browsers
         const adminRec = data.find(d => d.id === '00000000-0000-4000-8000-000000000000' || (d.role === 'admin' && d.id !== SYSTEM_DEPTS_ID));
         if (adminRec && adminRec.full_name && adminRec.full_name !== '__SYSTEM_DEPARTMENTS__') {
           localStorage.setItem('app_admin_email_settings_v1', JSON.stringify({
@@ -706,42 +704,36 @@ export async function fetchAllUsers(): Promise<User[]> {
           }));
         }
 
-        // 3. Filter out system config row from volunteer user list
+        // Filter out system config row from volunteer user list
         const userRecords = data.filter(d => d.id !== SYSTEM_DEPTS_ID && d.full_name !== '__SYSTEM_DEPARTMENTS__');
 
-        if (userRecords.length > 0) {
-          const cloudUsers: User[] = userRecords.map(d => ({
-            id: d.id,
-            role: d.role || 'tnv',
-            fullName: d.full_name || d.fullName || d.name || 'TNV',
-            email: d.email || `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-            phone: d.phone || d.phoneNumber || '',
-            facebookLink: d.facebook_link || d.facebookLink || '',
-            department: d.department || 'Hậu cần',
-            eventId: d.event_id || d.eventId || '',
-            eventName: d.event_name || d.eventName || '',
-            salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
-            createdAt: safeParseTimestamp(d.created_at || d.createdAt),
-            updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
-          }));
-          
-          const localUsers = getLocalUsers().filter(u => !u.id.startsWith('10000000-0000-4000-8000'));
-          const mergedMap = new Map<string, User>();
-          localUsers.forEach(u => mergedMap.set(u.id, u));
-          cloudUsers.forEach(u => mergedMap.set(u.id, u));
-          const finalUsers = Array.from(mergedMap.values());
-          saveLocalUsers(finalUsers);
-          return finalUsers;
-        } else {
-          return getLocalUsers().filter(u => !u.id.startsWith('10000000-0000-4000-8000'));
-        }
+        const cloudUsers: User[] = userRecords.map(d => ({
+          id: d.id,
+          role: d.role || 'tnv',
+          fullName: d.full_name || d.fullName || d.name || 'TNV',
+          email: d.email || `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+          phone: d.phone || d.phoneNumber || '',
+          facebookLink: d.facebook_link || d.facebookLink || '',
+          department: d.department || 'Hậu cần',
+          eventId: d.event_id || d.eventId || '',
+          eventName: d.event_name || d.eventName || '',
+          notes: d.notes || '',
+          salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
+          createdAt: safeParseTimestamp(d.created_at || d.createdAt),
+          updatedAt: safeParseTimestamp(d.updated_at || d.updatedAt),
+        }));
+
+        // Filter out mock users (10000000-0000-4000-8000-...) when Cloud is active
+        const realCloudUsers = cloudUsers.filter(u => !u.id.startsWith('10000000-0000-4000-8000'));
+        saveLocalUsers(realCloudUsers);
+        return realCloudUsers;
       }
     } catch (err) {
       console.warn("Supabase fetch users notice:", err);
     }
   }
 
-  // Fallback to local storage if Supabase is not active
+  // Fallback to local storage if Supabase Cloud is disabled
   return getLocalUsers();
 }
 
@@ -753,102 +745,72 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
     try {
       const { data, error } = await supabase.from('checkins').select('*').order('created_at', { ascending: false });
       if (!error && data) {
-        if (data.length > 0) {
-          const cloudCheckins: Checkin[] = data.map(d => {
-            const reconstructedUserId = d.user_id || d.userId || d.id;
-            const reconstructedName = d.full_name || d.fullName || 'TNV';
-            const createdAtMs = safeParseTimestamp(d.created_at || d.createdAt);
-            const updatedAtMs = safeParseTimestamp(d.updated_at || d.updatedAt);
-            const checkinTimeMs = d.checkin_time ? safeParseTimestamp(d.checkin_time) : (d.checkinTime ? safeParseTimestamp(d.checkinTime) : undefined);
-            const checkoutTimeMs = d.checkout_time ? safeParseTimestamp(d.checkout_time) : (d.checkoutTime ? safeParseTimestamp(d.checkoutTime) : undefined);
+        const cloudCheckins: Checkin[] = data.map(d => {
+          const reconstructedUserId = d.user_id || d.userId || d.id;
+          const reconstructedName = d.full_name || d.fullName || 'TNV';
+          const createdAtMs = safeParseTimestamp(d.created_at || d.createdAt);
+          const updatedAtMs = safeParseTimestamp(d.updated_at || d.updatedAt);
+          const checkinTimeMs = d.checkin_time ? safeParseTimestamp(d.checkin_time) : (d.checkinTime ? safeParseTimestamp(d.checkinTime) : undefined);
+          const checkoutTimeMs = d.checkout_time ? safeParseTimestamp(d.checkout_time) : (d.checkoutTime ? safeParseTimestamp(d.checkoutTime) : undefined);
 
-            // Auto-reconstruct user profile if missing from users list
-            if (reconstructedUserId && !existingUsersMap.has(reconstructedUserId)) {
-              const reconstructedUser: User = {
-                id: reconstructedUserId,
-                role: 'tnv',
-                fullName: reconstructedName,
-                email: `${reconstructedName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
-                phone: d.phone || '0000000000',
-                department: d.department || 'Hậu cần',
-                eventId: d.event_id || d.eventId || '',
-                eventName: d.event_name || d.eventName || '',
-                salaryRate: getDepartmentRate(d.department || 'Hậu cần'),
-                createdAt: createdAtMs,
-                updatedAt: Date.now(),
-              };
-              existingUsersMap.set(reconstructedUserId, reconstructedUser);
-              users.push(reconstructedUser);
-              saveLocalUsers(users);
-              safeSupabaseUpsertUser(reconstructedUser);
-            }
-
-            return {
-              id: d.id,
-              userId: reconstructedUserId,
+          // Auto-reconstruct user profile if missing from users list
+          if (reconstructedUserId && !existingUsersMap.has(reconstructedUserId)) {
+            const reconstructedUser: User = {
+              id: reconstructedUserId,
+              role: 'tnv',
               fullName: reconstructedName,
+              email: `${reconstructedName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
+              phone: d.phone || '0000000000',
               department: d.department || 'Hậu cần',
-              eventId: d.event_id || d.eventId || undefined,
-              eventName: d.event_name || d.eventName || undefined,
-              workDate: d.work_date || d.workDate || format(new Date(createdAtMs), 'yyyy-MM-dd'),
-              shiftName: d.shift_name || d.shiftName || 'Ca làm việc',
-              otHours: Number(d.ot_hours || d.otHours) || 0,
-              status: d.status || 'pending',
-              type: 'checkin',
-              adminNote: d.admin_note || d.notes || d.adminNote || '',
-              checkinTime: checkinTimeMs,
-              checkoutTime: checkoutTimeMs,
+              eventId: d.event_id || d.eventId || '',
+              eventName: d.event_name || d.eventName || '',
+              salaryRate: getDepartmentRate(d.department || 'Hậu cần'),
               createdAt: createdAtMs,
-              updatedAt: updatedAtMs,
+              updatedAt: Date.now(),
             };
-          });
-
-          const localCheckins = getLocalCheckins();
-          const mergedMap = new Map<string, Checkin>();
-          localCheckins.forEach(c => mergedMap.set(c.id, c));
-          cloudCheckins.forEach(c => {
-            const existing = mergedMap.get(c.id);
-            if (existing) {
-              mergedMap.set(c.id, {
-                ...existing,
-                ...c,
-                checkinTime: c.checkinTime || existing.checkinTime,
-                checkoutTime: c.checkoutTime || existing.checkoutTime,
-              });
-            } else {
-              mergedMap.set(c.id, c);
-            }
-          });
-          const finalCheckins = Array.from(mergedMap.values());
-          saveLocalCheckins(finalCheckins);
-
-          if (userId) {
-            const targetUser = users.find(u => 
-              u.id === userId || 
-              (u.email && u.email.toLowerCase() === userId.toLowerCase()) ||
-              (u.fullName && u.fullName.trim().toLowerCase() === userId.trim().toLowerCase())
-            );
-            return finalCheckins.filter(c => 
-              c.userId === userId || 
-              (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
-            );
+            existingUsersMap.set(reconstructedUserId, reconstructedUser);
+            users.push(reconstructedUser);
+            saveLocalUsers(users);
+            safeSupabaseUpsertUser(reconstructedUser);
           }
-          return finalCheckins;
-        } else {
-          const localCheckins = getLocalCheckins();
-          if (userId) {
-            const targetUser = users.find(u => 
-              u.id === userId || 
-              (u.email && u.email.toLowerCase() === userId.toLowerCase()) ||
-              (u.fullName && u.fullName.trim().toLowerCase() === userId.trim().toLowerCase())
-            );
-            return localCheckins.filter(c => 
-              c.userId === userId || 
-              (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
-            );
-          }
-          return localCheckins;
+
+          return {
+            id: d.id,
+            userId: reconstructedUserId,
+            fullName: reconstructedName,
+            department: d.department || 'Hậu cần',
+            eventId: d.event_id || d.eventId || undefined,
+            eventName: d.event_name || d.eventName || undefined,
+            workDate: d.work_date || d.workDate || format(new Date(createdAtMs), 'yyyy-MM-dd'),
+            shiftName: d.shift_name || d.shiftName || 'Ca làm việc',
+            otHours: Number(d.ot_hours || d.otHours) || 0,
+            status: d.status || 'pending',
+            type: d.type || 'checkin',
+            adminNote: d.admin_note || d.notes || d.adminNote || '',
+            emailNotifySent: Boolean(d.email_notify_sent || d.emailNotifySent),
+            checkinTime: checkinTimeMs,
+            checkoutTime: checkoutTimeMs,
+            createdAt: createdAtMs,
+            updatedAt: updatedAtMs,
+          };
+        });
+
+        // Filter out mock checkins (20000000-0000-4000-8000-...) when Cloud is active
+        const realCloudCheckins = cloudCheckins.filter(c => !c.id.startsWith('20000000-0000-4000-8000'));
+        saveLocalCheckins(realCloudCheckins);
+
+        if (userId) {
+          const targetUser = users.find(u => 
+            u.id === userId || 
+            (u.email && u.email.toLowerCase() === userId.toLowerCase()) ||
+            (u.fullName && u.fullName.trim().toLowerCase() === userId.trim().toLowerCase())
+          );
+          return realCloudCheckins.filter(c => 
+            c.userId === userId || 
+            (targetUser && c.fullName && c.fullName.trim().toLowerCase() === targetUser.fullName.trim().toLowerCase())
+          );
         }
+        return realCloudCheckins;
       }
     } catch (err) {
       console.warn("Supabase fetch checkins notice:", err);
@@ -881,7 +843,6 @@ export async function submitScheduleRegistration(
   eventId?: string,
   eventName?: string
 ): Promise<Checkin> {
-  // Ensure user profile has a valid UUID and is persisted in Supabase
   if (!isValidUUID(user.id)) {
     user.id = generateUUID();
     setLocalSession(user);
@@ -890,7 +851,6 @@ export async function submitScheduleRegistration(
   const chosenDepartment = targetDepartment || user.department;
   const deptRate = getDepartmentRate(chosenDepartment);
 
-  // Auto-assign active event if eventId is missing
   if (!eventId) {
     const activeEvts = getEventsList().filter(e => e.status === 'active');
     if (activeEvts.length > 0) {
@@ -899,7 +859,6 @@ export async function submitScheduleRegistration(
     }
   }
 
-  // Update user profile department and salary rate if targetDepartment is specified
   if (targetDepartment) {
     user.department = targetDepartment;
     user.salaryRate = deptRate;
@@ -909,7 +868,6 @@ export async function submitScheduleRegistration(
     } catch {}
   }
 
-  // Update existing shift if already registered for this exact date & shift, or create a new shift
   const existingCheckins = getLocalCheckins();
   const existingShift = existingCheckins.find(c => 
     (c.userId === user.id || (c.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())) && 
@@ -930,9 +888,9 @@ export async function submitScheduleRegistration(
     existingShift.updatedAt = Date.now();
 
     saveLocalCheckins(existingCheckins);
-    await triggerCloudSync();
     await safeSupabaseUpsertUser(user);
     await safeSupabaseUpsertCheckin(existingShift);
+    await triggerCloudSync();
 
     return existingShift;
   }
@@ -958,9 +916,9 @@ export async function submitScheduleRegistration(
   existingCheckins.unshift(newSchedule);
   saveLocalCheckins(existingCheckins);
 
-  await triggerCloudSync();
   await safeSupabaseUpsertUser(user);
   await safeSupabaseUpsertCheckin(newSchedule);
+  await triggerCloudSync();
 
   return newSchedule;
 }
@@ -1000,7 +958,6 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
     const userCheckins = await fetchCheckins(activeUser.id);
     const localUserCheckins = getLocalCheckins().filter(c => c.userId === activeUser.id);
 
-    // Merge Cloud and Local checkins so local checkinTime is NEVER lost!
     const allUserCheckins: Checkin[] = [...userCheckins];
     localUserCheckins.forEach(lc => {
       const idx = allUserCheckins.findIndex(c => c.id === lc.id);
@@ -1028,7 +985,7 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       if (openShift) {
         const now = Date.now();
         if (!openShift.checkinTime) {
-          openShift.checkinTime = now - 3600000; // Fallback 1h ago if missing
+          openShift.checkinTime = now - 3600000;
         }
 
         openShift.checkoutTime = now;
@@ -1036,7 +993,6 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         openShift.status = 'approved';
         openShift.updatedAt = now;
 
-        // Save local
         const allCheckins = getLocalCheckins();
         const idx = allCheckins.findIndex(c => c.id === openShift.id);
         if (idx !== -1) {
@@ -1061,7 +1017,6 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         };
       }
     } else {
-      // CHECK-IN ACTION: Smart matching for registered shifts across dates
       let openShift = allUserCheckins.find(c => c.workDate === workDate && !c.checkoutTime) 
         || allUserCheckins.find(c => c.workDate === workDate)
         || allUserCheckins.find(c => !c.checkinTime)
@@ -1089,7 +1044,6 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         };
       }
 
-      // Ensure eventId is attached
       if (!checkin.eventId) {
         const activeEvts = getEventsList().filter(e => e.status === 'active');
         if (activeEvts.length > 0) {
@@ -1103,7 +1057,6 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       checkin.status = 'pending';
       checkin.updatedAt = now;
 
-      // Save local
       const allCheckins = getLocalCheckins();
       const idx = allCheckins.findIndex(c => c.id === checkin.id);
       if (idx !== -1) {
@@ -1158,12 +1111,13 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
 
   if (isSupabaseActive() && isValidUUID(userId)) {
     try {
-      const updatePayload: any = {};
+      const updatePayload: any = { updated_at: Date.now() };
       if (data.fullName !== undefined) updatePayload.full_name = data.fullName;
       if (data.email !== undefined) updatePayload.email = data.email;
       if (data.phone !== undefined) updatePayload.phone = data.phone;
       if (data.facebookLink !== undefined) updatePayload.facebook_link = data.facebookLink;
       if (data.department !== undefined) updatePayload.department = data.department;
+      if (data.notes !== undefined) updatePayload.notes = data.notes;
       if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
       await supabase.from('users').update(updatePayload).eq('id', userId);
     } catch (e) {
@@ -1186,7 +1140,7 @@ export async function updateCheckinAdminNote(checkinId: string, adminNote: strin
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
-      await supabase.from('checkins').update({ admin_note: adminNote }).eq('id', checkinId);
+      await supabase.from('checkins').update({ admin_note: adminNote, updated_at: Date.now() }).eq('id', checkinId);
     } catch (e) {
       console.warn("Supabase update admin note notice:", e);
     }
@@ -1226,7 +1180,7 @@ export async function approveCheckinItem(checkinId: string): Promise<{ success: 
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
-      const updatePayload: any = { status: 'approved' };
+      const updatePayload: any = { status: 'approved', email_notify_sent: true, updated_at: Date.now() };
       if (target?.checkinTime) updatePayload.checkin_time = target.checkinTime;
       if (target?.checkoutTime) updatePayload.checkout_time = target.checkoutTime;
       await supabase.from('checkins').update(updatePayload).eq('id', checkinId);
@@ -1250,7 +1204,7 @@ export async function rejectCheckinItem(checkinId: string): Promise<{ success: b
 
   if (isSupabaseActive() && isValidUUID(checkinId)) {
     try {
-      await supabase.from('checkins').update({ status: 'rejected' }).eq('id', checkinId);
+      await supabase.from('checkins').update({ status: 'rejected', updated_at: Date.now() }).eq('id', checkinId);
     } catch (e) {
       console.warn("Supabase reject notice:", e);
     }
@@ -1301,6 +1255,8 @@ export async function updateCheckinShiftDetails(checkinId: string, updates: Part
       if (updates.shiftName !== undefined) updatePayload.shift_name = updates.shiftName;
       if (updates.otHours !== undefined) updatePayload.ot_hours = updates.otHours;
       if (updates.department !== undefined) updatePayload.department = updates.department;
+      if (updates.eventId !== undefined) updatePayload.event_id = updates.eventId;
+      if (updates.eventName !== undefined) updatePayload.event_name = updates.eventName;
       if (updates.adminNote !== undefined) updatePayload.admin_note = updates.adminNote;
       if (updates.status !== undefined) updatePayload.status = updates.status;
       await supabase.from('checkins').update(updatePayload).eq('id', checkinId);

@@ -1,71 +1,101 @@
--- Supabase Schema for Xanthic Mix Checkin App
+-- Supabase Comprehensive Schema for Volunteer & Checkin App
+-- Execute this SQL in Supabase Dashboard SQL Editor to establish a unified Single Source of Truth (SSOT).
 
--- 1. Create users table
-CREATE TABLE users (
-  id uuid REFERENCES auth.users NOT NULL PRIMARY KEY,
-  role text NOT NULL CHECK (role IN ('admin', 'tnv')),
+-- 1. Create or Upgrade `users` table
+CREATE TABLE IF NOT EXISTS users (
+  id uuid PRIMARY KEY,
+  role text NOT NULL DEFAULT 'tnv' CHECK (role IN ('admin', 'tnv')),
   full_name text NOT NULL,
-  phone text NOT NULL,
-  facebook_link text,
-  department text NOT NULL,
-  salary_rate numeric DEFAULT 0,
-  created_at bigint NOT NULL,
-  updated_at bigint NOT NULL
+  email text,
+  phone text DEFAULT '',
+  facebook_link text DEFAULT '',
+  department text DEFAULT 'Hậu cần',
+  event_id text,
+  event_name text,
+  salary_rate numeric DEFAULT 50000,
+  notes text DEFAULT '',
+  created_at bigint NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint,
+  updated_at bigint NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint
 );
 
--- 2. Create checkins table
-CREATE TABLE checkins (
-  id uuid DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id uuid REFERENCES users(id) NOT NULL,
+-- Add missing columns if table already exists
+ALTER TABLE users ADD COLUMN IF NOT EXISTS email text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS event_id text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS event_name text;
+ALTER TABLE users ADD COLUMN IF NOT EXISTS notes text;
+
+-- 2. Create or Upgrade `checkins` table
+CREATE TABLE IF NOT EXISTS checkins (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  user_id uuid REFERENCES users(id) ON DELETE CASCADE,
   full_name text NOT NULL,
-  department text NOT NULL,
-  status text NOT NULL CHECK (status IN ('pending', 'approved')),
-  created_at bigint NOT NULL,
-  updated_at bigint NOT NULL
+  department text DEFAULT 'Hậu cần',
+  event_id text,
+  event_name text,
+  work_date text,
+  shift_name text DEFAULT 'Ca làm việc',
+  ot_hours numeric DEFAULT 0,
+  status text NOT NULL DEFAULT 'pending',
+  type text DEFAULT 'checkin',
+  notes text DEFAULT '',
+  admin_note text DEFAULT '',
+  checkin_time bigint,
+  checkout_time bigint,
+  email_notify_sent boolean DEFAULT false,
+  created_at bigint NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint,
+  updated_at bigint NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint
 );
 
--- 3. Set up Row Level Security (RLS)
+-- Add missing columns if table already exists
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS event_id text;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS event_name text;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS work_date text;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS shift_name text;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS ot_hours numeric DEFAULT 0;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS type text DEFAULT 'checkin';
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS notes text DEFAULT '';
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS admin_note text DEFAULT '';
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS checkin_time bigint;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS checkout_time bigint;
+ALTER TABLE checkins ADD COLUMN IF NOT EXISTS email_notify_sent boolean DEFAULT false;
+
+-- 3. Dedicated System Settings Table (Departments, Rates, Events, Admin Mail Config)
+CREATE TABLE IF NOT EXISTS system_settings (
+  key text PRIMARY KEY,
+  value jsonb NOT NULL,
+  updated_at bigint NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint
+);
+
+-- 4. Enable Row Level Security (RLS) & Permissive Policies for Web App Access
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE checkins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
 
--- 4. Policies for users table
--- Admins can read all users
-CREATE POLICY "Admins can read all users" ON users
-  FOR SELECT USING (
-    (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
-  );
+-- Allow public read/write access for web client (Anon API key support)
+DROP POLICY IF EXISTS "Public access for users" ON users;
+CREATE POLICY "Public access for users" ON users FOR ALL USING (true) WITH CHECK (true);
 
--- Users can read their own profile
-CREATE POLICY "Users can read own profile" ON users
-  FOR SELECT USING (auth.uid() = id);
+DROP POLICY IF EXISTS "Public access for checkins" ON checkins;
+CREATE POLICY "Public access for checkins" ON checkins FOR ALL USING (true) WITH CHECK (true);
 
--- Users can insert their own profile on signup
-CREATE POLICY "Users can insert own profile" ON users
-  FOR INSERT WITH CHECK (auth.uid() = id);
+DROP POLICY IF EXISTS "Public access for system_settings" ON system_settings;
+CREATE POLICY "Public access for system_settings" ON system_settings FOR ALL USING (true) WITH CHECK (true);
 
--- Admins can update users (e.g. salary_rate)
-CREATE POLICY "Admins can update users" ON users
-  FOR UPDATE USING (
-    (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
-  );
+-- 5. Enable Realtime Publications for WebSocket Subscriptions (Safe Re-run)
+DO $$
+BEGIN
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE users;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
 
--- 5. Policies for checkins table
--- Admins can read all checkins
-CREATE POLICY "Admins can read all checkins" ON checkins
-  FOR SELECT USING (
-    (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
-  );
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE checkins;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
 
--- Users can read their own checkins
-CREATE POLICY "Users can read own checkins" ON checkins
-  FOR SELECT USING (auth.uid() = user_id);
-
--- Users can insert their own checkins
-CREATE POLICY "Users can insert own checkins" ON checkins
-  FOR INSERT WITH CHECK (auth.uid() = user_id);
-
--- Admins can update checkins (e.g. approve status)
-CREATE POLICY "Admins can update checkins" ON checkins
-  FOR UPDATE USING (
-    (SELECT role FROM users WHERE id = auth.uid()) = 'admin'
-  );
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE system_settings;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+END $$;
