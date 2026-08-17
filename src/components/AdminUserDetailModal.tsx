@@ -24,6 +24,7 @@ interface AdminUserDetailModalProps {
 export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, onDataChanged }: AdminUserDetailModalProps) {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [isEditingAdjustment, setIsEditingAdjustment] = useState(false);
+  const [salaryRateInput, setSalaryRateInput] = useState<number>(user?.salaryRate || 50000);
   const [adjAmountInput, setAdjAmountInput] = useState<number>(user?.adjustmentAmount || 0);
   const [adjNoteInput, setAdjNoteInput] = useState<string>(user?.adjustmentNote || '');
   
@@ -49,6 +50,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
 
   const handleSaveAdjustment = async () => {
     await updateUserProfileByAdmin(user.id, {
+      salaryRate: Number(salaryRateInput),
       adjustmentAmount: Number(adjAmountInput),
       adjustmentNote: adjNoteInput,
     });
@@ -168,22 +170,34 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
             </div>
             <button
               onClick={() => {
+                setSalaryRateInput(user.salaryRate || 50000);
                 setAdjAmountInput(user.adjustmentAmount || 0);
                 setAdjNoteInput(user.adjustmentNote || '');
                 setIsEditingAdjustment(!isEditingAdjustment);
               }}
               className="px-2.5 py-1 bg-purple-600 text-white rounded-lg font-bold text-[11px] hover:bg-purple-700 transition shrink-0"
             >
-              {isEditingAdjustment ? '✕ Đóng' : '✏️ Chỉnh Số Tiền Thưởng/Phạt'}
+              {isEditingAdjustment ? '✕ Đóng' : '✏️ Chỉnh Lương Cơ Bản & Thưởng/Phạt'}
             </button>
           </div>
 
-          {/* Inline Adjustment Edit Form */}
+          {/* Inline Financial Edit Form */}
           {isEditingAdjustment && (
             <div className="mt-3 p-3 bg-white rounded-xl border border-purple-300 shadow-sm space-y-2">
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                 <div>
-                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Số tiền cộng (+)/trừ (-):</label>
+                  <label className="block text-[10px] font-bold text-emerald-800 mb-0.5">💰 Lương cơ bản (VND/ca):</label>
+                  <input
+                    type="number"
+                    step={5000}
+                    value={salaryRateInput}
+                    onChange={(e) => setSalaryRateInput(Number(e.target.value))}
+                    placeholder="VD: 50000"
+                    className="w-full px-2.5 py-1.5 border border-emerald-300 bg-emerald-50/30 rounded-lg text-xs font-bold text-emerald-900 outline-none focus:ring-2 focus:ring-emerald-500"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">➕➖ Số tiền cộng (+)/trừ (-):</label>
                   <input
                     type="number"
                     step={5000}
@@ -194,7 +208,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                   />
                 </div>
                 <div>
-                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Lý do chi tiết:</label>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">📝 Lý do chi tiết:</label>
                   <input
                     type="text"
                     value={adjNoteInput}
@@ -215,7 +229,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                   onClick={handleSaveAdjustment}
                   className="px-4 py-1 bg-purple-600 text-white text-xs font-bold rounded-lg hover:bg-purple-700 shadow-xs"
                 >
-                  💾 Lưu tiền thưởng/trừ
+                  💾 Lưu thay đổi tài chính
                 </button>
               </div>
             </div>
