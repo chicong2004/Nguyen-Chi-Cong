@@ -48,7 +48,13 @@ export default function QRScannerModal({ isOpen, onClose, onScanSuccess, title }
 
         await html5Qrcode.start(
           { facingMode: 'environment' },
-          { fps: 15, qrbox: { width: 240, height: 240 } },
+          { 
+            fps: 25, 
+            qrbox: { width: 250, height: 250 },
+            experimentalFeatures: {
+              useBarCodeDetectorIfSupported: true,
+            }
+          } as any,
           (decodedText) => {
             if (isSubscribed) {
               playBeep();

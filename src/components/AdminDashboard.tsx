@@ -128,14 +128,10 @@ export default function AdminDashboard() {
       console.warn("Admin realtime setup notice:", e);
     }
 
-    // 2. Backup polling every 3 seconds for 100% cross-device guarantee
-    const timer = setInterval(loadAllData, 3000);
-
     return () => {
       if (channel) {
         try { supabase.removeChannel(channel); } catch {}
       }
-      clearInterval(timer);
     };
   }, []);
 

@@ -96,15 +96,8 @@ export default function TNVDashboard() {
       syncEventsAndDeps();
     });
 
-    // Auto refresh every 3 seconds to sync Admin salary updates, events & approval statuses in real-time!
-    const timer = setInterval(() => {
-      loadUserData();
-      syncEventsAndDeps();
-    }, 3000);
-    
     return () => {
       unsubscribe();
-      clearInterval(timer);
     };
   }, [userProfile?.id]);
 

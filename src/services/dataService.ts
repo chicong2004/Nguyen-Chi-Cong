@@ -589,13 +589,15 @@ export async function syncToGoogleSheets(customUsers?: User[], customCheckins?: 
   }
 }
 
-// Trigger Cloud Sync across all devices
-async function triggerCloudSync() {
-  const users = getLocalUsers();
-  const checkins = getLocalCheckins();
-  const departments = getDepartmentsList();
-  await pushGlobalCloudData({ users, checkins, departments });
-  await syncToGoogleSheets(users, checkins);
+// Trigger Cloud Sync across all devices (Background Non-Blocking)
+function triggerCloudSync() {
+  try {
+    const users = getLocalUsers();
+    const checkins = getLocalCheckins();
+    const departments = getDepartmentsList();
+    pushGlobalCloudData({ users, checkins, departments }).catch(() => {});
+    syncToGoogleSheets(users, checkins).catch(() => {});
+  } catch {}
 }
 
 // -------------------------------------------------------------
@@ -1409,13 +1411,39 @@ export async function updateCheckinShiftDetails(checkinId: string, updates: Part
 }
 
 export async function bulkApproveCheckinsList(checkinIds: string[]): Promise<void> {
-  for (const id of checkinIds) {
-    await approveCheckinItem(id);
+  if (!checkinIds || checkinIds.length === 0) return;
+  const now = Date.now();
+  const checkins = getLocalCheckins();
+  const validIdsSet = new Set(checkinIds);
+  
+  checkins.forEach(c => {
+    if (validIdsSet.has(c.id)) {
+      c.status = 'approved';
+      c.emailNotifySent = true;
+      c.updatedAt = now;
+    }
+  });
+  saveLocalCheckins(checkins);
+  triggerCloudSync();
+
+  if (isSupabaseActive()) {
+    try {
+      const validUUIDs = checkinIds.filter(id => isValidUUID(id));
+      if (validUUIDs.length > 0) {
+        await supabase.from('checkins').update({
+          status: 'approved',
+          email_notify_sent: true,
+          updated_at: now,
+        }).in('id', validUUIDs);
+      }
+    } catch (e) {
+      console.warn("Supabase bulk approve notice:", e);
+    }
   }
 }
 
 export async function updateUserSalary(userId: string, salaryRate: number): Promise<void> {
-  return updateUserProfileByAdmin(userId, { salaryRate });
+  await updateUserProfileByAdmin(userId, { salaryRate });
 }
 
 export async function removeUser(userId: string): Promise<void> {

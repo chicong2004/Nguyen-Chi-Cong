@@ -50,7 +50,7 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
     }
   }
 
-  const qrPayload = `${origin}/?action=qr_scan&type=${qrTypeParam}&date=${currentDate}&scope=${scope}&from=${validFrom}&to=${validTo}&shift=${encodeURIComponent(shiftLabel)}&key=${refreshKey}`;
+  const qrPayload = `${origin}/?action=qr_scan&type=${qrTypeParam}&date=${currentDate}&scope=${scope}&from=${validFrom}&to=${validTo}&key=${refreshKey}`;
 
   const handleRefreshQR = () => {
     setRefreshKey(Date.now());
@@ -184,7 +184,7 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
         <div className={`p-5 rounded-3xl border-2 flex flex-col items-center justify-center mb-4 shadow-inner ${
           qrType === 'event_checkin' ? 'bg-emerald-50/50 border-emerald-200' : 'bg-amber-50/50 border-amber-200'
         }`}>
-          <QRCodeSVG value={qrPayload} size={220} level="H" includeMargin={true} />
+          <QRCodeSVG value={qrPayload} size={240} level="M" includeMargin={true} />
           
           <div className={`mt-3 text-xs font-bold px-3 py-1 rounded-full border ${
             qrType === 'event_checkin' 

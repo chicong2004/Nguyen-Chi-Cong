@@ -123,12 +123,9 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
 
-      const timer = setInterval(loadSession, 3000);
-
       return () => {
         subscription.unsubscribe();
         unsubscribe();
-        clearInterval(timer);
       };
     }
   }, [currentMode]);
