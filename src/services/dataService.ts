@@ -1058,9 +1058,17 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         const params = urlObj.searchParams;
         const type = params.get('type');
         const date = params.get('date');
+        const scope = params.get('scope') || 'full_day';
+        const from = params.get('from');
+        const to = params.get('to');
+        const shift = params.get('shift');
         parsed = {
           type: type === 'checkout' || type === 'event_checkout' ? 'event_checkout' : 'event_checkin',
           date: date || format(new Date(), 'yyyy-MM-dd'),
+          scope,
+          from,
+          to,
+          shift,
         };
       } catch {
         parsed = { type: 'event_checkin' };
@@ -1087,6 +1095,17 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         success: false,
         message: `⚠️ Mã QR này đã hết hạn (chỉ có hiệu lực trong ngày ${qrDate}). Hôm nay là ngày ${todayDate}, vui lòng quét mã QR của ngày hôm nay!`,
       };
+    }
+
+    // 2. Strict Time-Window Check (If scope === 'shift_window')
+    const currentTimeStr = format(new Date(), 'HH:mm');
+    if (parsed.scope === 'shift_window' && parsed.from && parsed.to) {
+      if (currentTimeStr < parsed.from || currentTimeStr > parsed.to) {
+        return {
+          success: false,
+          message: `⚠️ Mã QR này chỉ áp dụng trong khung giờ ${parsed.from} - ${parsed.to} (${parsed.shift || 'Theo ca'}). Giờ hiện tại (${currentTimeStr}) chưa đến hoặc đã qua khung giờ cho phép!`,
+        };
+      }
     }
 
     const workDate = todayDate; // Strict date matching: ALWAYS use today's date
