@@ -423,16 +423,14 @@ export function calculateShiftPay(shiftName: string, salaryRate: number, otHours
   return shiftBasePay + otPay;
 }
 
-export function calculateMeals(shiftName: string): { lunch: number; dinner: number; total: number } {
+export function calculateMeals(shiftName: string, otHours: number = 0): { lunch: number; dinner: number; total: number } {
   const name = shiftName || '';
-  if (name.includes('Cả Ngày') || name.toLowerCase().includes('full')) {
-    return { lunch: 1, dinner: 1, total: 2 };
-  } else if (name.includes('Sáng')) {
-    return { lunch: 1, dinner: 0, total: 1 };
-  } else if (name.includes('Chiều') || name.includes('Tối')) {
-    return { lunch: 0, dinner: 1, total: 1 };
-  }
-  return { lunch: 1, dinner: 0, total: 1 };
+  const hasEveningOT = Number(otHours) > 0 || name.toLowerCase().includes('ot') || name.includes('Tối');
+
+  const lunch = 1; // 1 người/ngày = 1 suất ăn trưa mặc định
+  const dinner = hasEveningOT ? 1 : 0; // Chỉ tính thêm 1 suất ăn tối nếu có làm OT tối
+
+  return { lunch, dinner, total: lunch + dinner };
 }
 
 export function saveDepartmentRates(rates: Record<string, number>) {

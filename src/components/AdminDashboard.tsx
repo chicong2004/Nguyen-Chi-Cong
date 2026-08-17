@@ -199,11 +199,25 @@ export default function AdminDashboard() {
       return cDate === targetDate;
     });
 
+    // Gom nhóm danh sách ca làm theo từng người trong ngày targetDate
+    const userCheckinsMap = new Map<string, Checkin[]>();
     dateCheckins.forEach(c => {
-      const m = calculateMeals(c.shiftName || '');
-      lunch += m.lunch;
-      dinner += m.dinner;
+      const uKey = c.userId || c.fullName;
+      if (!userCheckinsMap.has(uKey)) {
+        userCheckinsMap.set(uKey, []);
+      }
+      userCheckinsMap.get(uKey)!.push(c);
     });
+
+    // Quy tắc: 1 người/ngày đăng ký Ca Sáng/Chiều = 1 suất ăn trưa; chỉ ai có OT Tối mới +1 suất ăn tối
+    userCheckinsMap.forEach(userShifts => {
+      const hasEveningOT = userShifts.some(s => Number(s.otHours) > 0 || (s.shiftName || '').includes('Tối') || (s.shiftName || '').toLowerCase().includes('ot'));
+      lunch += 1;
+      if (hasEveningOT) {
+        dinner += 1;
+      }
+    });
+
     return { lunch, dinner, total: lunch + dinner, targetDate };
   }, [checkins, selectedMealDate]);
 
@@ -309,12 +323,20 @@ export default function AdminDashboard() {
       const approvedShifts = userCheckins.length;
       const totalOT = userCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);
       const totalSalary = userCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName, user.salaryRate, c.otHours), 0);
+      // Gom nhóm ca làm đã duyệt theo từng ngày làm việc để tính đúng suất ăn (1 người/ngày = 1 suất trưa; có OT tối = +1 suất tối)
+      const dateMap = new Map<string, Checkin[]>();
+      userCheckins.forEach(c => {
+        const wDate = c.workDate || format(c.createdAt, 'yyyy-MM-dd');
+        if (!dateMap.has(wDate)) dateMap.set(wDate, []);
+        dateMap.get(wDate)!.push(c);
+      });
+
       let lunchMeals = 0;
       let dinnerMeals = 0;
-      userCheckins.forEach(c => {
-        const m = calculateMeals(c.shiftName);
-        lunchMeals += m.lunch;
-        dinnerMeals += m.dinner;
+      dateMap.forEach(shiftsOnDate => {
+        const hasEveningOT = shiftsOnDate.some(s => Number(s.otHours) > 0 || (s.shiftName || '').includes('Tối') || (s.shiftName || '').toLowerCase().includes('ot'));
+        lunchMeals += 1;
+        if (hasEveningOT) dinnerMeals += 1;
       });
 
       return {
