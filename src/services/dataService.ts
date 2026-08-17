@@ -610,6 +610,11 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     user.id = generateUUID();
   }
   
+  let finalNotes = user.notes || '';
+  if (user.adjustmentAmount || user.adjustmentNote) {
+    finalNotes = `${finalNotes}||__ADJ__:${JSON.stringify({ a: user.adjustmentAmount || 0, n: user.adjustmentNote || '' })}`;
+  }
+
   const cleanPayload: any = {
     id: user.id,
     role: user.role || 'tnv',
@@ -621,23 +626,14 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     event_id: user.eventId || null,
     event_name: user.eventName || null,
     salary_rate: user.salaryRate || 50000,
-    adjustment_amount: user.adjustmentAmount || 0,
-    adjustment_note: user.adjustmentNote || '',
-    notes: user.notes || '',
+    notes: finalNotes,
     updated_at: user.updatedAt || Date.now(),
   };
 
   try {
     const { error } = await supabase.from('users').upsert(cleanPayload);
     if (error) {
-      // Fallback: If 400 Bad Request error (column adjustment_amount/adjustment_note missing in DB schema), retry with safe payload
-      const fallbackPayload = { ...cleanPayload };
-      delete fallbackPayload.adjustment_amount;
-      delete fallbackPayload.adjustment_note;
-      if (user.adjustmentAmount || user.adjustmentNote) {
-        fallbackPayload.notes = `${user.notes || ''}||__ADJ__:${JSON.stringify({ a: user.adjustmentAmount || 0, n: user.adjustmentNote || '' })}`;
-      }
-      await supabase.from('users').upsert(fallbackPayload);
+      console.warn("Notice syncing user to cloud:", error.message);
     }
   } catch (err: any) {
     console.warn("Notice syncing user to cloud:", err);
@@ -1287,27 +1283,22 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
       if (data.phone !== undefined) updatePayload.phone = data.phone;
       if (data.facebookLink !== undefined) updatePayload.facebook_link = data.facebookLink;
       if (data.department !== undefined) updatePayload.department = data.department;
-      if (data.notes !== undefined) updatePayload.notes = data.notes;
       if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
-      if (data.adjustmentAmount !== undefined) updatePayload.adjustment_amount = data.adjustmentAmount;
-      if (data.adjustmentNote !== undefined) updatePayload.adjustment_note = data.adjustmentNote;
+
+      const targetUser = user || getLocalUsers().find(u => u.id === userId);
+      const adj = data.adjustmentAmount !== undefined ? data.adjustmentAmount : (targetUser?.adjustmentAmount || 0);
+      const adjNote = data.adjustmentNote !== undefined ? data.adjustmentNote : (targetUser?.adjustmentNote || '');
+      const baseNote = data.notes !== undefined ? data.notes : (targetUser?.notes || '');
+
+      if (adj || adjNote) {
+        updatePayload.notes = `${baseNote}||__ADJ__:${JSON.stringify({ a: adj, n: adjNote })}`;
+      } else if (data.notes !== undefined) {
+        updatePayload.notes = data.notes;
+      }
+
       const { error } = await supabase.from('users').update(updatePayload).eq('id', userId);
       if (error) {
-        // Fallback: If 400 Bad Request error (column adjustment_amount/adjustment_note missing in DB schema), retry with safe payload
-        const fallbackPayload = { ...updatePayload };
-        delete fallbackPayload.adjustment_amount;
-        delete fallbackPayload.adjustment_note;
-
-        const targetUser = user || getLocalUsers().find(u => u.id === userId);
-        const adj = data.adjustmentAmount !== undefined ? data.adjustmentAmount : (targetUser?.adjustmentAmount || 0);
-        const adjNote = data.adjustmentNote !== undefined ? data.adjustmentNote : (targetUser?.adjustmentNote || '');
-        const baseNote = data.notes !== undefined ? data.notes : (targetUser?.notes || '');
-
-        if (adj || adjNote) {
-          fallbackPayload.notes = `${baseNote}||__ADJ__:${JSON.stringify({ a: adj, n: adjNote })}`;
-        }
-
-        await supabase.from('users').update(fallbackPayload).eq('id', userId);
+        console.warn("Supabase update profile notice:", error.message);
       }
     } catch (e) {
       console.warn("Supabase update profile notice:", e);
