@@ -11,6 +11,7 @@ import {
   updateUserProfileByAdmin,
   updateCheckinAdminNote,
   getDepartmentsList,
+  fetchDepartmentsListAsync,
   calculateShiftPay,
   calculateMeals,
   rejectCheckinItem,
@@ -70,7 +71,8 @@ export default function AdminDashboard() {
       );
       setCheckins(validCheckins);
 
-      setDepartmentsList(getDepartmentsList());
+      const deps = await fetchDepartmentsListAsync();
+      setDepartmentsList(deps);
       setAdminSettings(getAdminEmailSettings());
       
       const evts = await fetchEventsListAsync();
@@ -85,7 +87,7 @@ export default function AdminDashboard() {
   useEffect(() => {
     loadAllData();
 
-    // 1. Direct Supabase Realtime Channel Subscription for INSERT, UPDATE, DELETE on checkins & users
+    // 1. Direct Supabase Realtime Channel Subscription for INSERT, UPDATE, DELETE on checkins, users & system_settings
     let channel: any = null;
     try {
       if (isSupabaseActive()) {
@@ -96,7 +98,7 @@ export default function AdminDashboard() {
             'postgres_changes',
             { event: '*', schema: 'public', table: 'checkins' },
             (payload) => {
-              console.log("⚡ [Admin Realtime WebSocket] Checkin event (INSERT/UPDATE/DELETE):", payload);
+              console.log("⚡ [Admin Realtime WebSocket] Checkin event:", payload);
               loadAllData();
             }
           )
@@ -104,13 +106,21 @@ export default function AdminDashboard() {
             'postgres_changes',
             { event: '*', schema: 'public', table: 'users' },
             (payload) => {
-              console.log("⚡ [Admin Realtime WebSocket] User event (INSERT/UPDATE/DELETE):", payload);
+              console.log("⚡ [Admin Realtime WebSocket] User event:", payload);
+              loadAllData();
+            }
+          )
+          .on(
+            'postgres_changes',
+            { event: '*', schema: 'public', table: 'system_settings' },
+            (payload) => {
+              console.log("⚡ [Admin Realtime WebSocket] System Settings event:", payload);
               loadAllData();
             }
           )
           .subscribe((status) => {
             if (status === 'SUBSCRIBED') {
-              console.log("✅ Admin Dashboard Realtime SUBSCRIBED to checkins & users!");
+              console.log("✅ Admin Dashboard Realtime SUBSCRIBED to checkins, users & system_settings!");
             }
           });
       }

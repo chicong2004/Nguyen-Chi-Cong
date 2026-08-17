@@ -278,6 +278,21 @@ export function getDepartmentsList(): string[] {
   return defaultDeps;
 }
 
+export async function fetchDepartmentsListAsync(): Promise<string[]> {
+  if (isSupabaseActive()) {
+    try {
+      const { data, error } = await supabase.from('system_settings').select('*').eq('key', 'departments').maybeSingle();
+      if (!error && data && data.value && Array.isArray(data.value)) {
+        localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(data.value));
+        return data.value;
+      }
+    } catch (e) {
+      console.warn("Lỗi fetch departments từ Supabase:", e);
+    }
+  }
+  return getDepartmentsList();
+}
+
 export function getDepartmentRates(): Record<string, number> {
   try {
     const raw = localStorage.getItem(DEPARTMENT_RATES_KEY);
