@@ -281,10 +281,32 @@ export function getDepartmentsList(): string[] {
 export async function fetchDepartmentsListAsync(): Promise<string[]> {
   if (isSupabaseActive()) {
     try {
+      // 1. Check system_settings table first
       const { data, error } = await supabase.from('system_settings').select('*').eq('key', 'departments').maybeSingle();
-      if (!error && data && data.value && Array.isArray(data.value)) {
+      if (!error && data && data.value && Array.isArray(data.value) && data.value.length > 0) {
         localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(data.value));
         return data.value;
+      }
+
+      // 2. Fallback to legacy SYSTEM_DEPTS_ID row in users table
+      const { data: sysData, error: sysErr } = await supabase.from('users').select('*').eq('id', SYSTEM_DEPTS_ID).maybeSingle();
+      if (!sysErr && sysData && sysData.department) {
+        try {
+          const parsed = JSON.parse(sysData.department);
+          let extractedDeps: string[] = [];
+          if (Array.isArray(parsed) && parsed.length > 0) {
+            extractedDeps = parsed;
+          } else if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.deps)) {
+            extractedDeps = parsed.deps;
+          }
+
+          if (extractedDeps.length > 0) {
+            localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(extractedDeps));
+            // Auto migrate to system_settings
+            supabase.from('system_settings').upsert({ key: 'departments', value: extractedDeps, updated_at: Date.now() }).then(() => {}).catch(() => {});
+            return extractedDeps;
+          }
+        } catch {}
       }
     } catch (e) {
       console.warn("Lỗi fetch departments từ Supabase:", e);
