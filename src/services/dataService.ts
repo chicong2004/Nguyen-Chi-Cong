@@ -136,6 +136,14 @@ export function subscribeToRealtimeChanges(onUpdate: (payload?: any) => void): (
           onUpdate(payload);
         }
       )
+      .on(
+        'postgres_changes',
+        { event: '*', schema: 'public', table: 'departments' },
+        (payload) => {
+          console.log("⚡ [Realtime WebSocket] Departments table updated:", payload);
+          onUpdate(payload);
+        }
+      )
       .subscribe((status, err) => {
         if (status === 'SUBSCRIBED') {
           console.log("✅ Supabase Realtime WebSockets ACTIVE & CONNECTED!");
@@ -278,41 +286,111 @@ export function getDepartmentsList(): string[] {
   return defaultDeps;
 }
 
-export async function fetchDepartmentsListAsync(): Promise<string[]> {
+export interface DepartmentItem {
+  id?: string;
+  name: string;
+  allowance: number;
+}
+
+export async function fetchDepartmentsWithDetailsAsync(): Promise<DepartmentItem[]> {
   if (isSupabaseActive()) {
     try {
-      // 1. Check system_settings table first
-      const { data, error } = await supabase.from('system_settings').select('*').eq('key', 'departments').maybeSingle();
-      if (!error && data && data.value && Array.isArray(data.value) && data.value.length > 0) {
-        localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(data.value));
-        return data.value;
+      // 1. Query directly from Supabase departments table
+      const { data, error } = await supabase.from('departments').select('*').order('created_at', { ascending: true });
+      if (!error && data && Array.isArray(data) && data.length > 0) {
+        const items: DepartmentItem[] = data.map(d => ({
+          id: d.id,
+          name: d.name,
+          allowance: Number(d.allowance) || 50000,
+        }));
+        
+        // Cache locally for fallback
+        const depNames = items.map(i => i.name);
+        const ratesMap: Record<string, number> = {};
+        items.forEach(i => { ratesMap[i.name] = i.allowance; });
+        localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(depNames));
+        localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(ratesMap));
+
+        return items;
       }
 
-      // 2. Fallback to legacy SYSTEM_DEPTS_ID row in users table
-      const { data: sysData, error: sysErr } = await supabase.from('users').select('*').eq('id', SYSTEM_DEPTS_ID).maybeSingle();
-      if (!sysErr && sysData && sysData.department) {
-        try {
-          const parsed = JSON.parse(sysData.department);
-          let extractedDeps: string[] = [];
-          if (Array.isArray(parsed) && parsed.length > 0) {
-            extractedDeps = parsed;
-          } else if (typeof parsed === 'object' && parsed !== null && Array.isArray(parsed.deps)) {
-            extractedDeps = parsed.deps;
-          }
-
-          if (extractedDeps.length > 0) {
-            localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(extractedDeps));
-            // Auto migrate to system_settings
-            supabase.from('system_settings').upsert({ key: 'departments', value: extractedDeps, updated_at: Date.now() }).then(() => {}).catch(() => {});
-            return extractedDeps;
-          }
-        } catch {}
+      // If departments table is empty, auto-seed default departments
+      const initialDeps = [
+        { name: 'Hậu cần', allowance: 50000 },
+        { name: 'Truyền thông', allowance: 50000 },
+        { name: 'Sự kiện', allowance: 50000 },
+        { name: 'Tài trợ', allowance: 50000 },
+        { name: 'Nhân sự', allowance: 50000 },
+      ];
+      const { data: seeded } = await supabase.from('departments').upsert(initialDeps, { onConflict: 'name' }).select('*');
+      if (seeded && seeded.length > 0) {
+        return seeded.map(d => ({ id: d.id, name: d.name, allowance: Number(d.allowance) || 50000 }));
       }
     } catch (e) {
-      console.warn("Lỗi fetch departments từ Supabase:", e);
+      console.warn("Lỗi fetch departments details từ Supabase:", e);
     }
   }
-  return getDepartmentsList();
+
+  const names = getDepartmentsList();
+  const rates = getDepartmentRates();
+  return names.map(n => ({ name: n, allowance: rates[n] !== undefined ? Number(rates[n]) : 50000 }));
+}
+
+export async function fetchDepartmentsListAsync(): Promise<string[]> {
+  const items = await fetchDepartmentsWithDetailsAsync();
+  return items.map(i => i.name);
+}
+
+export async function addDepartmentAsync(name: string, allowance: number = 50000): Promise<void> {
+  const depName = name.trim();
+  if (!depName) return;
+
+  if (isSupabaseActive()) {
+    try {
+      await supabase.from('departments').insert([{ name: depName, allowance }]);
+    } catch (e) {
+      console.warn("Lỗi insert department Supabase:", e);
+    }
+  }
+
+  const deps = getDepartmentsList();
+  if (!deps.includes(depName)) {
+    deps.push(depName);
+    const rates = getDepartmentRates();
+    rates[depName] = allowance;
+    localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(deps));
+    localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(rates));
+  }
+}
+
+export async function deleteDepartmentAsync(idOrName: string): Promise<void> {
+  if (isSupabaseActive()) {
+    try {
+      if (isValidUUID(idOrName)) {
+        await supabase.from('departments').delete().eq('id', idOrName);
+      } else {
+        await supabase.from('departments').delete().eq('name', idOrName);
+      }
+    } catch (e) {
+      console.warn("Lỗi delete department Supabase:", e);
+    }
+  }
+
+  const deps = getDepartmentsList().filter(d => d !== idOrName);
+  localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(deps));
+}
+
+export async function updateDepartmentAllowanceAsync(name: string, allowance: number): Promise<void> {
+  if (isSupabaseActive()) {
+    try {
+      await supabase.from('departments').update({ allowance }).eq('name', name);
+    } catch (e) {
+      console.warn("Lỗi update department allowance Supabase:", e);
+    }
+  }
+  const rates = getDepartmentRates();
+  rates[name] = allowance;
+  localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(rates));
 }
 
 export function getDepartmentRates(): Record<string, number> {

@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { 
-  getDepartmentsList, 
-  fetchDepartmentsListAsync, 
-  getDepartmentRates, 
-  saveDepartmentsAndRatesAsync 
+  DepartmentItem,
+  fetchDepartmentsWithDetailsAsync,
+  addDepartmentAsync,
+  deleteDepartmentAsync,
+  updateDepartmentAllowanceAsync,
+  saveDepartmentsAndRatesAsync
 } from '../services/dataService';
 
 interface AdminDepartmentModalProps {
@@ -13,53 +15,54 @@ interface AdminDepartmentModalProps {
 }
 
 export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: AdminDepartmentModalProps) {
-  const [departments, setDepartments] = useState<string[]>(getDepartmentsList());
-  const [rates, setRates] = useState<Record<string, number>>({});
+  const [departmentItems, setDepartmentItems] = useState<DepartmentItem[]>([]);
   const [newDepName, setNewDepName] = useState('');
   const [newDepRate, setNewDepRate] = useState<number>(50000);
 
+  const loadData = async () => {
+    const items = await fetchDepartmentsWithDetailsAsync();
+    setDepartmentItems(items);
+  };
+
   useEffect(() => {
     if (isOpen) {
-      fetchDepartmentsListAsync().then(deps => setDepartments(deps));
-      setRates(getDepartmentRates());
+      loadData();
     }
   }, [isOpen]);
 
   if (!isOpen) return null;
 
   const handleRateChange = async (depName: string, rate: number) => {
-    const updatedRates = { ...rates, [depName]: rate };
-    setRates(updatedRates);
-    await saveDepartmentsAndRatesAsync(departments, updatedRates);
+    const updated = departmentItems.map(item => item.name === depName ? { ...item, allowance: rate } : item);
+    setDepartmentItems(updated);
+    await updateDepartmentAllowanceAsync(depName, rate);
+    const deps = updated.map(u => u.name);
+    const rates: Record<string, number> = {};
+    updated.forEach(u => { rates[u.name] = u.allowance; });
+    await saveDepartmentsAndRatesAsync(deps, rates);
     onSaved();
   };
 
   const handleAdd = async (e: React.FormEvent) => {
     e.preventDefault();
     const name = newDepName.trim();
-    if (name && !departments.includes(name)) {
-      const updatedDeps = [...departments, name];
-      const updatedRates = { ...rates, [name]: Number(newDepRate) || 50000 };
-      setDepartments(updatedDeps);
-      setRates(updatedRates);
-      await saveDepartmentsAndRatesAsync(updatedDeps, updatedRates);
+    if (name && !departmentItems.some(d => d.name === name)) {
+      const rate = Number(newDepRate) || 50000;
+      await addDepartmentAsync(name, rate);
+      await loadData();
       setNewDepName('');
       setNewDepRate(50000);
       onSaved();
     }
   };
 
-  const handleDelete = async (depName: string) => {
-    if (departments.length <= 1) {
+  const handleDelete = async (depItem: DepartmentItem) => {
+    if (departmentItems.length <= 1) {
       alert("Phải giữ lại ít nhất 1 bộ phận trong hệ thống!");
       return;
     }
-    const updatedDeps = departments.filter(d => d !== depName);
-    const updatedRates = { ...rates };
-    delete updatedRates[depName];
-    setDepartments(updatedDeps);
-    setRates(updatedRates);
-    await saveDepartmentsAndRatesAsync(updatedDeps, updatedRates);
+    await deleteDepartmentAsync(depItem.id || depItem.name);
+    await loadData();
     onSaved();
   };
 
@@ -113,11 +116,11 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
 
         {/* Department List with Rate inputs */}
         <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
-          {departments.map(dep => {
-            const currentRate = rates[dep] !== undefined ? rates[dep] : 50000;
+          {departmentItems.map(item => {
+            const currentRate = item.allowance !== undefined ? item.allowance : 50000;
             return (
-              <div key={dep} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 gap-2">
-                <span className="text-xs font-bold text-gray-900 sm:w-1/3 truncate">{dep}</span>
+              <div key={item.id || item.name} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 gap-2">
+                <span className="text-xs font-bold text-gray-900 sm:w-1/3 truncate">{item.name}</span>
                 
                 <div className="flex items-center gap-2 flex-1">
                   <span className="text-[11px] text-gray-500 font-medium whitespace-nowrap">Thù lao/ca:</span>
@@ -125,14 +128,14 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
                     type="number"
                     step={5000}
                     value={currentRate}
-                    onChange={(e) => handleRateChange(dep, Number(e.target.value))}
+                    onChange={(e) => handleRateChange(item.name, Number(e.target.value))}
                     className="w-28 px-2 py-1 bg-white border border-emerald-300 rounded-lg text-xs font-bold text-emerald-700 outline-none focus:ring-2 focus:ring-emerald-500"
                   />
                   <span className="text-[11px] font-bold text-emerald-600">VND</span>
                 </div>
 
                 <button
-                  onClick={() => handleDelete(dep)}
+                  onClick={() => handleDelete(item)}
                   className="text-xs text-red-600 hover:bg-red-50 p-1.5 rounded-lg transition self-end sm:self-auto"
                 >
                   🗑️ Xoá

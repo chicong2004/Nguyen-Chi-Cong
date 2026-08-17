@@ -59,16 +59,25 @@ ALTER TABLE checkins ADD COLUMN IF NOT EXISTS checkin_time bigint;
 ALTER TABLE checkins ADD COLUMN IF NOT EXISTS checkout_time bigint;
 ALTER TABLE checkins ADD COLUMN IF NOT EXISTS email_notify_sent boolean DEFAULT false;
 
--- 3. Dedicated System Settings Table (Departments, Rates, Events, Admin Mail Config)
+-- 3. Dedicated `departments` table (id, name, allowance)
+CREATE TABLE IF NOT EXISTS departments (
+  id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+  name text NOT NULL UNIQUE,
+  allowance numeric DEFAULT 50000,
+  created_at bigint NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint
+);
+
+-- 4. Dedicated System Settings Table (Events, Admin Mail Config, Fallback)
 CREATE TABLE IF NOT EXISTS system_settings (
   key text PRIMARY KEY,
   value jsonb NOT NULL,
   updated_at bigint NOT NULL DEFAULT (extract(epoch from now()) * 1000)::bigint
 );
 
--- 4. Enable Row Level Security (RLS) & Permissive Policies for Web App Access
+-- 5. Enable Row Level Security (RLS) & Permissive Policies for Web App Access
 ALTER TABLE users ENABLE ROW LEVEL SECURITY;
 ALTER TABLE checkins ENABLE ROW LEVEL SECURITY;
+ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
 ALTER TABLE system_settings ENABLE ROW LEVEL SECURITY;
 
 -- Allow public read/write access for web client (Anon API key support)
@@ -78,10 +87,13 @@ CREATE POLICY "Public access for users" ON users FOR ALL USING (true) WITH CHECK
 DROP POLICY IF EXISTS "Public access for checkins" ON checkins;
 CREATE POLICY "Public access for checkins" ON checkins FOR ALL USING (true) WITH CHECK (true);
 
+DROP POLICY IF EXISTS "Public access for departments" ON departments;
+CREATE POLICY "Public access for departments" ON departments FOR ALL USING (true) WITH CHECK (true);
+
 DROP POLICY IF EXISTS "Public access for system_settings" ON system_settings;
 CREATE POLICY "Public access for system_settings" ON system_settings FOR ALL USING (true) WITH CHECK (true);
 
--- 5. Enable Realtime Publications for WebSocket Subscriptions (Safe Re-run)
+-- 6. Enable Realtime Publications for WebSocket Subscriptions (Safe Re-run)
 DO $$
 BEGIN
   BEGIN
@@ -91,6 +103,11 @@ BEGIN
 
   BEGIN
     ALTER PUBLICATION supabase_realtime ADD TABLE checkins;
+  EXCEPTION WHEN duplicate_object THEN NULL;
+  END;
+
+  BEGIN
+    ALTER PUBLICATION supabase_realtime ADD TABLE departments;
   EXCEPTION WHEN duplicate_object THEN NULL;
   END;
 

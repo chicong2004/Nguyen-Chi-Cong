@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from '../types';
-import { updateUserProfileByAdmin, getDepartmentsList } from '../services/dataService';
+import { updateUserProfileByAdmin, getDepartmentsList, fetchDepartmentsListAsync } from '../services/dataService';
 
 interface AdminEditUserModalProps {
   user: User | null;
@@ -14,6 +14,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
   const [email, setEmail] = useState('');
   const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('Hậu cần');
+  const [depsList, setDepsList] = useState<string[]>(getDepartmentsList());
   const [salaryRate, setSalaryRate] = useState<number>(50000);
   const [facebookLink, setFacebookLink] = useState('');
   const [notes, setNotes] = useState('');
@@ -22,6 +23,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
   const [error, setError] = useState('');
 
   useEffect(() => {
+    fetchDepartmentsListAsync().then(deps => setDepsList(deps));
     if (user) {
       setFullName(user.fullName || '');
       setEmail(user.email || '');
@@ -123,7 +125,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
                 onChange={(e) => setDepartment(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
               >
-                {getDepartmentsList().map(dep => (
+                {depsList.map(dep => (
                   <option key={dep} value={dep}>{dep}</option>
                 ))}
               </select>
