@@ -42,12 +42,15 @@ export async function sendApprovalEmailNotification(payload: {
 }): Promise<{ success: boolean; message: string }> {
   const adminSettings = getAdminEmailSettings();
   const subject = `[THÔNG BÁO] Lịch làm việc "${payload.shiftName}" đã được duyệt`;
-  const body = `Xin chào ${payload.toName},\n\nLịch làm việc của bạn (${payload.shiftName} - Ngày ${payload.workDate || 'Hôm nay'}) đã được ${adminSettings.adminName} duyệt thành công!\nMức phụ cấp: ${(payload.salaryRate || 50000).toLocaleString()} VND/ca.\n\nThông báo tự động từ: ${adminSettings.senderEmail}\nTrân trọng!`;
+  const workDateStr = payload.workDate || 'Hôm nay';
+  const rateStr = `${(payload.salaryRate || 50000).toLocaleString()} VND/ca`;
+  
+  const textBody = `Xin chào ${payload.toName},\n\nLịch làm việc của bạn (${payload.shiftName} - Ngày ${workDateStr}) đã được ${adminSettings.adminName} duyệt thành công!\nMức phụ cấp ca: ${rateStr}.\n\nThông báo tự động từ Ban Quản Lý (${adminSettings.senderEmail})\nTrân trọng!`;
 
   try {
     const GOOGLE_SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwHyPo28ktAc87yPCjtpGA6_DvPpypjom1LCohIr33Z-sDzgR5fzNVeIIBrB3gZn9E1/exec';
 
-    // Channel 1: Google Apps Script WebApp (Direct Gmail dispatch without activation prompt)
+    // Channel 1: Google Apps Script WebApp
     fetch(GOOGLE_SHEETS_WEBAPP_URL, {
       method: 'POST',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' },
@@ -56,11 +59,11 @@ export async function sendApprovalEmailNotification(payload: {
         toEmail: payload.toEmail,
         toName: payload.toName,
         subject,
-        message: body,
+        message: textBody,
       })
     }).catch(e => console.warn("Google Apps Script email notice:", e));
 
-    // Channel 2: FormSubmit AJAX endpoint (with captcha false and reply-to header)
+    // Channel 2: FormSubmit AJAX endpoint formatted with key-values for rich HTML delivery
     await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(payload.toEmail)}`, {
       method: 'POST',
       headers: {
@@ -68,12 +71,17 @@ export async function sendApprovalEmailNotification(payload: {
         'Accept': 'application/json'
       },
       body: JSON.stringify({
-        _subject: subject,
-        _replyto: adminSettings.senderEmail,
-        _captcha: "false",
-        _template: "table",
-        message: body,
-        name: adminSettings.adminName,
+        "Trạng thái": "🎉 DUYỆT THÀNH CÔNG",
+        "Kính gửi": payload.toName,
+        "Thông báo": `Lịch làm việc (${payload.shiftName}) của bạn đã được duyệt chính thức!`,
+        "Ca làm việc": payload.shiftName,
+        "Ngày làm việc": workDateStr,
+        "Mức phụ cấp / ca": rateStr,
+        "Người duyệt": adminSettings.adminName,
+        "Email hỗ trợ": adminSettings.senderEmail,
+        "_subject": subject,
+        "_replyto": adminSettings.senderEmail,
+        "_captcha": "false",
       })
     }).catch(e => console.warn("FormSubmit notice:", e));
 
