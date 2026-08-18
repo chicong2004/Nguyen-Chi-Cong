@@ -45,6 +45,22 @@ export async function sendApprovalEmailNotification(payload: {
   const body = `Xin chào ${payload.toName},\n\nLịch làm việc của bạn (${payload.shiftName} - Ngày ${payload.workDate || 'Hôm nay'}) đã được ${adminSettings.adminName} duyệt thành công!\nMức phụ cấp: ${(payload.salaryRate || 50000).toLocaleString()} VND/ca.\n\nThông báo tự động từ: ${adminSettings.senderEmail}\nTrân trọng!`;
 
   try {
+    const GOOGLE_SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwHyPo28ktAc87yPCjtpGA6_DvPpypjom1LCohIr33Z-sDzgR5fzNVeIIBrB3gZn9E1/exec';
+
+    // Channel 1: Google Apps Script WebApp (Direct Gmail dispatch without activation prompt)
+    fetch(GOOGLE_SHEETS_WEBAPP_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
+      body: JSON.stringify({
+        action: 'send_email',
+        toEmail: payload.toEmail,
+        toName: payload.toName,
+        subject,
+        message: body,
+      })
+    }).catch(e => console.warn("Google Apps Script email notice:", e));
+
+    // Channel 2: FormSubmit AJAX endpoint (with captcha false and reply-to header)
     await fetch(`https://formsubmit.co/ajax/${encodeURIComponent(payload.toEmail)}`, {
       method: 'POST',
       headers: {
@@ -54,10 +70,12 @@ export async function sendApprovalEmailNotification(payload: {
       body: JSON.stringify({
         _subject: subject,
         _replyto: adminSettings.senderEmail,
+        _captcha: "false",
+        _template: "table",
         message: body,
         name: adminSettings.adminName,
       })
-    }).catch(e => console.warn("Email API dispatch notice:", e));
+    }).catch(e => console.warn("FormSubmit notice:", e));
 
     return {
       success: true,
