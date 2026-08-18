@@ -319,17 +319,54 @@ export interface DepartmentItem {
 }
 
 export async function fetchDepartmentsWithDetailsAsync(): Promise<DepartmentItem[]> {
+  if (isSupabaseActive()) {
+    try {
+      const { data, error } = await supabase.from('departments').select('*').order('created_at', { ascending: true });
+      if (!error && data && Array.isArray(data) && data.length > 0) {
+        const items: DepartmentItem[] = data.map(d => ({
+          id: d.id,
+          name: d.name,
+          allowance: Number(d.allowance) || 50000,
+        }));
+        
+        const depNames = items.map(i => i.name);
+        const ratesMap: Record<string, number> = {};
+        items.forEach(i => { ratesMap[i.name] = i.allowance; });
+        localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(depNames));
+        localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(ratesMap));
+
+        return items;
+      }
+
+      const initialDeps = [
+        { name: 'Lễ Tân', allowance: 70000 },
+        { name: 'Hậu cần', allowance: 50000 },
+      ];
+      const { data: seeded } = await supabase.from('departments').upsert(initialDeps, { onConflict: 'name' }).select('*');
+      if (seeded && seeded.length > 0) {
+        return seeded.map(d => ({ id: d.id, name: d.name, allowance: Number(d.allowance) || 50000 }));
+      }
+    } catch (e) {
+      console.warn("Lỗi fetch departments details từ Supabase:", e);
+    }
+  }
+
+  let names: string[] = ['Lễ Tân', 'Hậu cần'];
   try {
-    localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(['Lễ Tân', 'Hậu cần']));
+    const raw = localStorage.getItem(CUSTOM_DEPARTMENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) names = parsed;
+    }
   } catch {}
-  return [
-    { name: 'Lễ Tân', allowance: 70000 },
-    { name: 'Hậu cần', allowance: 50000 },
-  ];
+
+  const rates = getDepartmentRates();
+  return names.map(n => ({ name: n, allowance: rates[n] !== undefined ? Number(rates[n]) : 50000 }));
 }
 
 export async function fetchDepartmentsListAsync(): Promise<string[]> {
-  return ['Lễ Tân', 'Hậu cần'];
+  const items = await fetchDepartmentsWithDetailsAsync();
+  return items.map(i => i.name);
 }
 
 export async function addDepartmentAsync(name: string, allowance: number = 50000): Promise<void> {
@@ -344,7 +381,15 @@ export async function addDepartmentAsync(name: string, allowance: number = 50000
     }
   }
 
-  const deps = getDepartmentsList();
+  let deps = ['Lễ Tân', 'Hậu cần'];
+  try {
+    const raw = localStorage.getItem(CUSTOM_DEPARTMENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) deps = parsed;
+    }
+  } catch {}
+
   if (!deps.includes(depName)) {
     deps.push(depName);
     const rates = getDepartmentRates();
@@ -367,7 +412,15 @@ export async function deleteDepartmentAsync(idOrName: string): Promise<void> {
     }
   }
 
-  const deps = getDepartmentsList().filter(d => d !== idOrName);
+  let deps = ['Lễ Tân', 'Hậu cần'];
+  try {
+    const raw = localStorage.getItem(CUSTOM_DEPARTMENTS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) deps = parsed;
+    }
+  } catch {}
+  deps = deps.filter(d => d !== idOrName);
   localStorage.setItem(CUSTOM_DEPARTMENTS_KEY, JSON.stringify(deps));
 }
 

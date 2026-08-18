@@ -271,8 +271,9 @@ export default function AdminDashboard() {
     }
   };
 
-  const handleDepartmentChangeInline = async (userId: string, newDept: string) => {
-    await updateUserProfileByAdmin(userId, { department: newDept });
+  const handleDepartmentChangeInline = async (userId: string, newWork: string) => {
+    const workRate = getDepartmentRate(newWork);
+    await updateUserProfileByAdmin(userId, { workRole: newWork, salaryRate: workRate });
     await loadAllData();
   };
 
@@ -733,10 +734,11 @@ export default function AdminDashboard() {
                     <thead className="text-[11px] text-gray-400 bg-gray-50 uppercase font-semibold border-b border-gray-100">
                       <tr>
                         <th className="px-4 py-3">Họ và Tên / Liên hệ</th>
+                        <th className="px-4 py-3 text-center">Bộ phận (Đăng ký)</th>
                         <th className="px-4 py-3">Công việc (Edit trực tiếp)</th>
                         <th className="px-4 py-3 text-right">Lương ca</th>
                         <th className="px-4 py-3 text-center">Ca đã duyệt</th>
-                        <th className="px-4 py-3 text-right">Tổng phụ cấp (VND)</th>
+                        <th className="px-4 py-3 text-right">Tổng thù lao (VND)</th>
                         <th className="px-4 py-3 text-center">Chi tiết & Ca làm việc</th>
                         <th className="px-4 py-3 text-center">Thao tác</th>
                       </tr>
@@ -774,10 +776,17 @@ export default function AdminDashboard() {
                               </div>
                             </td>
 
-                            {/* Inline Department Select */}
+                            {/* Initial Registration Department */}
+                            <td className="px-4 py-3 align-middle text-center">
+                              <span className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold border border-blue-200">
+                                {user.department || 'Lễ Tân'}
+                              </span>
+                            </td>
+
+                            {/* Inline Work Select */}
                             <td className="px-4 py-3 align-middle">
                               <select
-                                value={user.department}
+                                value={user.workRole || user.department || (departmentsList[0] || 'Lễ Tân')}
                                 onChange={(e) => handleDepartmentChangeInline(user.id, e.target.value)}
                                 className="px-2.5 py-1 text-xs border border-gray-300 rounded-lg bg-white font-bold text-gray-800 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
                               >

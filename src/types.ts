@@ -18,7 +18,8 @@ export interface User {
   email: string;
   phone: string;
   facebookLink?: string;
-  department: string;
+  department: string; // Bộ phận đăng ký ban đầu (Lễ Tân / Hậu cần)
+  workRole?: string; // Công việc do Admin phân công
   eventId?: string;
   eventName?: string;
   notes?: string;
