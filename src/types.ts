@@ -22,6 +22,7 @@ export interface User {
   eventId?: string;
   eventName?: string;
   notes?: string;
+  confirmSetup?: boolean; // Xác nhận tham gia setup trước 1 ngày
   salaryRate: number; // VND / ca (Chỉ Admin mới có quyền sửa)
   adjustmentAmount?: number; // Số tiền cộng (+) thưởng/phụ cấp hoặc trừ (-) phạt/tạm ứng
   adjustmentNote?: string; // Lý do chi tiết cộng/trừ tiền
@@ -46,6 +47,7 @@ export interface Checkin {
   type?: 'checkin' | 'checkout' | 'full';
   qrCodeToken?: string;
   adminNote?: string;
+  confirmSetup?: boolean;
   emailNotifySent?: boolean;
   createdAt: number;
   updatedAt: number;

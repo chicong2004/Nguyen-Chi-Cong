@@ -117,11 +117,16 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
             {user.fullName.charAt(0).toUpperCase()}
           </div>
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h3 className="text-xl font-black text-gray-900">{user.fullName}</h3>
               <span className="bg-blue-100 text-blue-800 text-xs font-bold px-2.5 py-0.5 rounded-full">
                 {user.department}
               </span>
+              {user.confirmSetup && (
+                <span className="bg-purple-100 text-purple-800 text-xs font-bold px-2.5 py-0.5 rounded-full border border-purple-200">
+                  ⚡ Setup trước 1 ngày
+                </span>
+              )}
             </div>
             <p className="text-xs text-gray-500 mt-0.5">
               📱 Phone: <span className="font-bold text-gray-800">{user.phone}</span> &bull; 📧 Email: <span className="font-bold text-gray-800">{user.email}</span> &bull; 🔑 MK: <span className="font-bold text-purple-700 bg-purple-50 px-1.5 py-0.5 rounded-md border border-purple-200">{user.password || user.phone}</span>

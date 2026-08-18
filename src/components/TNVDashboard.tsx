@@ -49,6 +49,7 @@ export default function TNVDashboard() {
     return list[0] || 'Ca Sáng (07:00 - 12:00)';
   });
   const [notes, setNotes] = useState<string>('');
+  const [confirmSetup, setConfirmSetup] = useState<boolean>(Boolean(userProfile?.confirmSetup));
   const [successMessage, setSuccessMessage] = useState('');
 
   // Scanner modal
@@ -194,7 +195,8 @@ export default function TNVDashboard() {
         (notes || '').trim(),
         targetDept,
         selectedEvt?.id,
-        selectedEvt?.name
+        selectedEvt?.name,
+        confirmSetup
       );
 
       setSuccessMessage(`Đã gửi đăng ký lịch làm ca (${targetDept} - ${targetDate} - ${targetShift})! Đang chờ Admin duyệt.`);
@@ -498,6 +500,19 @@ export default function TNVDashboard() {
                 placeholder="VD: Em xin phép đến muộn 15p ca sáng..."
                 className="w-full px-3.5 py-2 border border-gray-300 rounded-xl text-xs outline-none focus:ring-2 focus:ring-blue-500"
               />
+            </div>
+
+            <div className="flex items-center gap-2.5 p-3 bg-purple-50/60 rounded-xl border border-purple-200">
+              <input
+                type="checkbox"
+                id="dashboardScheduleConfirmSetup"
+                checked={confirmSetup}
+                onChange={(e) => setConfirmSetup(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="dashboardScheduleConfirmSetup" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
+                ⚡ Xác nhận tham gia setup trước 1 ngày?
+              </label>
             </div>
 
             <button

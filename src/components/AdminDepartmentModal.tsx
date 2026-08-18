@@ -77,10 +77,10 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
         </button>
 
         <h3 className="text-xl font-black text-gray-900 mb-1">
-          🏢 Quản Lý Bộ Phận & Chi Phí (Phụ Cấp)
+          🏢 Quản Lý Công Việc, Bộ Phận & Chi Phí
         </h3>
         <p className="text-xs text-gray-500 mb-4">
-          Thiết lập mức thù lao/ca (VND) mặc định cho từng bộ phận để hiển thị cho TNV trước khi đăng ký.
+          Thiết lập danh sách công việc/bộ phận, định mức thù lao/ca (VND) và chi phí làm thêm (OT) cho nhân sự.
         </p>
 
         {/* Add Department Form */}

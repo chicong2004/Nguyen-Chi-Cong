@@ -436,7 +436,7 @@ export default function AdminDashboard() {
               onClick={() => setIsDeptModalOpen(true)}
               className="px-3.5 py-2 bg-indigo-600 hover:bg-indigo-700 text-white text-xs font-bold rounded-xl shadow-sm transition"
             >
-              🏢 Quản Lý Bộ Phận
+              🏢 Quản Lý Công Việc & Chi Phí
             </button>
 
             <button
@@ -761,7 +761,14 @@ export default function AdminDashboard() {
                                   {user.fullName.charAt(0).toUpperCase()}
                                 </div>
                                 <div>
-                                  <div className="font-bold text-gray-900 text-sm">{user.fullName}</div>
+                                  <div className="font-bold text-gray-900 text-sm flex items-center gap-1.5 flex-wrap">
+                                    <span>{user.fullName}</span>
+                                    {user.confirmSetup && (
+                                      <span className="bg-purple-100 text-purple-800 text-[10px] font-bold px-2 py-0.5 rounded-full border border-purple-200">
+                                        ⚡ Setup trước 1 ngày
+                                      </span>
+                                    )}
+                                  </div>
                                   <div className="text-gray-500 text-[11px]">📱 {user.phone} &bull; 📧 {user.email}</div>
                                 </div>
                               </div>

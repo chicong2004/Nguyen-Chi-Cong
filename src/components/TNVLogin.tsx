@@ -71,8 +71,8 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
-  const [facebookLink, setFacebookLink] = useState('');
-  const [department, setDepartment] = useState('Hậu cần');
+  const [department, setDepartment] = useState('Lễ Tân');
+  const [confirmSetup, setConfirmSetup] = useState(false);
 
 
   const [error, setError] = useState('');
@@ -112,10 +112,11 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
           email: cleanEmail,
           phone: cleanPhone,
           facebookLink: (facebookLink || '').trim(),
-          department: department || 'Hậu cần',
+          department: department || 'Lễ Tân',
           eventId: selectedEventId || chosenEvt?.id || '',
           eventName: chosenEvt?.name || '',
           notes: '',
+          confirmSetup,
           password: password.trim(),
         });
         setSuccess('Đăng ký thành công! Đang tự động chuyển đến bảng cá nhân...');
@@ -263,6 +264,19 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
                 placeholder="https://facebook.com/..."
                 className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs"
               />
+            </div>
+
+            <div className="flex items-center gap-2.5 p-3 bg-purple-50/60 rounded-xl border border-purple-200">
+              <input
+                type="checkbox"
+                id="tnvRegisterConfirmSetup"
+                checked={confirmSetup}
+                onChange={(e) => setConfirmSetup(e.target.checked)}
+                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
+              />
+              <label htmlFor="tnvRegisterConfirmSetup" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
+                ⚡ Xác nhận tham gia setup trước 1 ngày?
+              </label>
             </div>
           </>
         )}

@@ -57,14 +57,8 @@ export function getFormattedShiftList(): string[] {
 
 
 const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
-  'Hậu cần': 50000,
-  'Truyền thông': 60000,
-  'Sự kiện': 50000,
-  'Tài trợ': 50000,
-  'Nhân sự': 50000,
-  'Cửu vạn': 150000,
   'Lễ Tân': 70000,
-  'Backstage': 80000,
+  'Hậu cần': 50000,
 };
 
 const MOCK_USER_1_ID = '10000000-0000-4000-8000-000000000001';
@@ -315,7 +309,7 @@ export function generateUUID(): string {
 }
 
 export function getDepartmentsList(): string[] {
-  const defaultDeps = ['Hậu cần', 'Truyền thông', 'Sự kiện', 'Tài trợ', 'Nhân sự'];
+  const defaultDeps = ['Lễ Tân', 'Hậu cần'];
   try {
     const raw = localStorage.getItem(CUSTOM_DEPARTMENTS_KEY);
     if (raw) {
@@ -358,11 +352,8 @@ export async function fetchDepartmentsWithDetailsAsync(): Promise<DepartmentItem
 
       // If departments table is empty, auto-seed default departments
       const initialDeps = [
+        { name: 'Lễ Tân', allowance: 70000 },
         { name: 'Hậu cần', allowance: 50000 },
-        { name: 'Truyền thông', allowance: 50000 },
-        { name: 'Sự kiện', allowance: 50000 },
-        { name: 'Tài trợ', allowance: 50000 },
-        { name: 'Nhân sự', allowance: 50000 },
       ];
       const { data: seeded } = await supabase.from('departments').upsert(initialDeps, { onConflict: 'name' }).select('*');
       if (seeded && seeded.length > 0) {
@@ -742,6 +733,7 @@ export async function registerTNV(payload: {
   eventId?: string;
   eventName?: string;
   notes?: string;
+  confirmSetup?: boolean;
   password?: string;
 }): Promise<User> {
   const cleanEmail = payload.email.trim().toLowerCase();
@@ -782,15 +774,16 @@ export async function registerTNV(payload: {
   const newUser: User = {
     id: generateUUID(),
     role: 'tnv',
-    fullName: payload.fullName,
-    email: payload.email,
-    phone: payload.phone,
-    facebookLink: payload.facebookLink || '',
-    department: payload.department,
+    fullName: payload.fullName.trim(),
+    email: cleanEmail,
+    phone: payload.phone.trim(),
+    facebookLink: (payload.facebookLink || '').trim(),
+    department: payload.department || 'Lễ Tân',
     eventId: payload.eventId || '',
     eventName: payload.eventName || '',
     notes: payload.notes || '',
-    salaryRate: getDepartmentRate(payload.department),
+    confirmSetup: Boolean(payload.confirmSetup),
+    salaryRate: getDepartmentRate(payload.department || 'Lễ Tân'),
     password: userPassword,
     createdAt: Date.now(),
     updatedAt: Date.now(),
@@ -1120,7 +1113,8 @@ export async function submitScheduleRegistration(
   notes?: string,
   targetDepartment?: string,
   eventId?: string,
-  eventName?: string
+  eventName?: string,
+  confirmSetup?: boolean
 ): Promise<Checkin> {
   if (!isValidUUID(user.id)) {
     user.id = generateUUID();
