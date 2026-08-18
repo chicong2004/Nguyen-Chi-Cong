@@ -652,6 +652,9 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
   if (user.password) {
     meta.p = user.password;
   }
+  if (user.confirmSetup !== undefined) {
+    meta.s = Boolean(user.confirmSetup);
+  }
   if (Object.keys(meta).length > 0) {
     finalNotes = `${finalNotes}||__ADJ__:${JSON.stringify(meta)}`;
   }
@@ -964,6 +967,7 @@ export async function fetchAllUsers(): Promise<User[]> {
           let parsedAdjNote = d.adjustment_note || d.adjustmentNote || '';
           let parsedPassword = d.password || d.pass || '';
 
+          let parsedConfirmSetup = Boolean(d.confirm_setup || d.confirmSetup);
           if (typeof rawNotes === 'string' && rawNotes.includes('||__ADJ__:')) {
             const parts = rawNotes.split('||__ADJ__:');
             rawNotes = parts[0];
@@ -972,6 +976,7 @@ export async function fetchAllUsers(): Promise<User[]> {
               if (!parsedAdjAmount && parsed.a !== undefined) parsedAdjAmount = Number(parsed.a) || 0;
               if (!parsedAdjNote && parsed.n !== undefined) parsedAdjNote = parsed.n;
               if (!parsedPassword && parsed.p) parsedPassword = parsed.p;
+              if (parsed.s !== undefined) parsedConfirmSetup = Boolean(parsed.s);
             } catch {}
           }
 
@@ -982,10 +987,11 @@ export async function fetchAllUsers(): Promise<User[]> {
             email: d.email || `${(d.full_name || 'tnv').toLowerCase().replace(/\s+/g, '')}@gmail.com`,
             phone: d.phone || d.phoneNumber || '',
             facebookLink: d.facebook_link || d.facebookLink || '',
-            department: d.department || 'Hậu cần',
+            department: d.department || 'Lễ Tân',
             eventId: d.event_id || d.eventId || '',
             eventName: d.event_name || d.eventName || '',
             notes: rawNotes,
+            confirmSetup: parsedConfirmSetup,
             salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
             adjustmentAmount: parsedAdjAmount,
             adjustmentNote: parsedAdjNote,
