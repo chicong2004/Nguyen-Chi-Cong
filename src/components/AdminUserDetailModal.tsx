@@ -147,19 +147,13 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
               <span className="text-base font-black text-emerald-600">{approvedCheckins.length} ca</span>
             </div>
             <div>
-              <span className="text-[11px] text-gray-500 font-medium block">Mức lương cơ bản</span>
+              <span className="text-[11px] text-gray-500 font-medium block">Mức lương công việc</span>
               <span className="text-base font-black text-gray-800">{(user.salaryRate || 50000).toLocaleString()}đ/ca</span>
             </div>
             <div>
-              <span className="text-[11px] text-gray-500 font-medium block">Cộng/Trừ thưởng phạt</span>
-              <span className={`text-base font-black ${
-                (user.adjustmentAmount || 0) > 0 
-                  ? 'text-emerald-600' 
-                  : (user.adjustmentAmount || 0) < 0 
-                    ? 'text-red-600' 
-                    : 'text-gray-500'
-              }`}>
-                {(user.adjustmentAmount || 0) > 0 ? `+${user.adjustmentAmount?.toLocaleString()}đ` : `${(user.adjustmentAmount || 0).toLocaleString()}đ`}
+              <span className="text-[11px] text-gray-500 font-medium block">Tổng chi phí OT</span>
+              <span className="text-base font-black text-purple-700">
+                +{approvedCheckins.reduce((otSum, c) => otSum + ((Number(c.otHours) || 0) * 25000), 0).toLocaleString()}đ
               </span>
             </div>
             <div>
@@ -168,21 +162,18 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
             </div>
           </div>
 
-          {/* Quick Edit Adjustment Button & Note */}
           <div className="mt-2.5 pt-2 border-t border-gray-200 flex items-center justify-between text-xs">
             <div className="text-purple-900 font-semibold truncate pr-2">
-              📝 Lý do thưởng/trừ: <span className="font-bold text-gray-800">{user.adjustmentNote || '(Chưa có ghi chú)'}</span>
+              ⏰ Đơn giá OT: <span className="font-bold text-gray-800">25.000đ/giờ (Gán số giờ OT trực tiếp ở ca làm bên dưới)</span>
             </div>
             <button
               onClick={() => {
                 setSalaryRateInput(user.salaryRate || 50000);
-                setAdjAmountInput(user.adjustmentAmount || 0);
-                setAdjNoteInput(user.adjustmentNote || '');
                 setIsEditingAdjustment(!isEditingAdjustment);
               }}
               className="px-2.5 py-1 bg-purple-600 text-white rounded-lg font-bold text-[11px] hover:bg-purple-700 transition shrink-0"
             >
-              {isEditingAdjustment ? '✕ Đóng' : '✏️ Chỉnh Lương Cơ Bản & Thưởng/Phạt'}
+              {isEditingAdjustment ? '✕ Đóng' : '✏️ Chỉnh Mức Lương Công Việc'}
             </button>
           </div>
 
@@ -296,7 +287,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                       </div>
 
                       <div className="flex items-center justify-between text-xs text-gray-600 pt-1">
-                        <span>🏢 Bộ phận: <strong className="text-blue-700">{shift.department}</strong> | OT: <strong className="text-purple-700">+{shift.otHours || 0}h</strong></span>
+                        <span>🏢 Công việc: <strong className="text-blue-700">{shift.department}</strong> | OT: <strong className="text-purple-700">+{shift.otHours || 0}h</strong></span>
                         <span className="font-extrabold text-emerald-700">Thù lao: {shiftPay.toLocaleString()} VND</span>
                       </div>
 
@@ -387,7 +378,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Bộ phận ca này</label>
+                          <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Công việc ca này</label>
                           <select
                             value={editDepartment}
                             onChange={(e) => setEditDepartment(e.target.value)}

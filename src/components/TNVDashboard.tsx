@@ -453,7 +453,7 @@ export default function TNVDashboard() {
             )}
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
-                <span>🏢 Chọn / Đổi Bộ Phận Công Tác Cho Ca Này:</span>
+                <span>🏢 Chọn / Đổi Công Việc Cho Ca Này:</span>
                 <span className="text-[10px] text-blue-600 font-semibold">(Có thể đổi theo từng ca)</span>
               </label>
               <select
@@ -502,17 +502,35 @@ export default function TNVDashboard() {
               />
             </div>
 
-            <div className="flex items-center gap-2.5 p-3 bg-purple-50/60 rounded-xl border border-purple-200">
-              <input
-                type="checkbox"
-                id="dashboardScheduleConfirmSetup"
-                checked={confirmSetup}
-                onChange={(e) => setConfirmSetup(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-              />
-              <label htmlFor="dashboardScheduleConfirmSetup" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
-                ⚡ Xác nhận tham gia setup trước 1 ngày?
+            <div className="p-3.5 bg-purple-50/70 rounded-2xl border border-purple-200 space-y-2">
+              <label className="block text-xs font-bold text-purple-900">
+                ⚡ Xác nhận tham gia setup trước 1 ngày? <span className="text-red-500">*</span>
               </label>
+              <div className="grid grid-cols-2 gap-2">
+                <button
+                  type="button"
+                  onClick={() => setConfirmSetup(true)}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition ${
+                    confirmSetup === true 
+                      ? 'bg-purple-600 text-white border-purple-600 shadow-sm' 
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-300'
+                  }`}
+                >
+                  🟢 Có
+                </button>
+
+                <button
+                  type="button"
+                  onClick={() => setConfirmSetup(false)}
+                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition ${
+                    confirmSetup === false 
+                      ? 'bg-red-600 text-white border-red-600 shadow-sm' 
+                      : 'bg-white text-gray-700 border-gray-300 hover:border-red-300'
+                  }`}
+                >
+                  🔴 Không
+                </button>
+              </div>
             </div>
 
             <button

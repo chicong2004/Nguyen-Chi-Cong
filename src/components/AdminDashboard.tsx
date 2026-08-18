@@ -733,8 +733,8 @@ export default function AdminDashboard() {
                     <thead className="text-[11px] text-gray-400 bg-gray-50 uppercase font-semibold border-b border-gray-100">
                       <tr>
                         <th className="px-4 py-3">Họ và Tên / Liên hệ</th>
-                        <th className="px-4 py-3">Bộ phận (Edit trực tiếp)</th>
-                        <th className="px-4 py-3 text-right">Phụ cấp/ca</th>
+                        <th className="px-4 py-3">Công việc (Edit trực tiếp)</th>
+                        <th className="px-4 py-3 text-right">Lương ca</th>
                         <th className="px-4 py-3 text-center">Ca đã duyệt</th>
                         <th className="px-4 py-3 text-right">Tổng phụ cấp (VND)</th>
                         <th className="px-4 py-3 text-center">Chi tiết & Ca làm việc</th>

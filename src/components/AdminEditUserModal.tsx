@@ -128,7 +128,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Bộ phận công tác</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Công việc công tác</label>
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}

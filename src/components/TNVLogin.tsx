@@ -72,8 +72,8 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
   const [facebookLink, setFacebookLink] = useState('');
-  const [department, setDepartment] = useState('Lễ Tân');
-  const [confirmSetup, setConfirmSetup] = useState(false);
+  const [department, setDepartment] = useState('Hậu cần');
+  const [confirmSetup, setConfirmSetup] = useState<boolean | null>(null);
 
 
   const [error, setError] = useState('');
@@ -107,17 +107,20 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
         if (!password || password.trim().length < 4) {
           throw new Error('Vui lòng đặt Mật khẩu từ 4 ký tự trở lên.');
         }
+        if (confirmSetup === null) {
+          throw new Error('Vui lòng chọn Xác nhận tham gia setup trước 1 ngày (Có hoặc Không).');
+        }
         const chosenEvt = events.find(e => e.id === selectedEventId) || (events.length > 0 ? events[0] : undefined);
         const newUser = await registerTNV({
           fullName: cleanName,
           email: cleanEmail,
           phone: cleanPhone,
           facebookLink: (facebookLink || '').trim(),
-          department: department || 'Lễ Tân',
+          department: department || 'Hậu cần',
           eventId: selectedEventId || chosenEvt?.id || '',
           eventName: chosenEvt?.name || '',
           notes: '',
-          confirmSetup,
+          confirmSetup: Boolean(confirmSetup),
           password: password.trim(),
         });
         setSuccess('Đăng ký thành công! Đang tự động chuyển đến bảng cá nhân...');
@@ -243,7 +246,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
               </div>
 
               <div>
-                <label className="block text-xs font-semibold text-gray-700 mb-1">Bộ phận đăng ký <span className="text-red-500">*</span></label>
+                <label className="block text-xs font-semibold text-gray-700 mb-1">Công việc đăng ký <span className="text-red-500">*</span></label>
                 <select
                   value={department}
                   onChange={(e) => setDepartment(e.target.value)}
@@ -267,17 +270,41 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
               />
             </div>
 
-            <div className="flex items-center gap-2.5 p-3 bg-purple-50/60 rounded-xl border border-purple-200">
-              <input
-                type="checkbox"
-                id="tnvRegisterConfirmSetup"
-                checked={confirmSetup}
-                onChange={(e) => setConfirmSetup(e.target.checked)}
-                className="w-4 h-4 text-blue-600 rounded focus:ring-blue-500 cursor-pointer"
-              />
-              <label htmlFor="tnvRegisterConfirmSetup" className="text-xs font-bold text-purple-900 cursor-pointer select-none">
-                ⚡ Xác nhận tham gia setup trước 1 ngày?
+            <div className="p-3.5 bg-purple-50/70 rounded-2xl border border-purple-200 space-y-2">
+              <label className="block text-xs font-bold text-purple-900">
+                ⚡ Xác nhận tham gia setup trước 1 ngày? <span className="text-red-500">*</span>
               </label>
+              <div className="grid grid-cols-2 gap-2">
+                <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition ${
+                  confirmSetup === true 
+                    ? 'bg-purple-600 text-white border-purple-600 shadow-sm' 
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-purple-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="confirmSetupOption"
+                    checked={confirmSetup === true}
+                    onChange={() => setConfirmSetup(true)}
+                    className="sr-only"
+                  />
+                  <span>🟢 Có</span>
+                </label>
+
+                <label className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold cursor-pointer transition ${
+                  confirmSetup === false 
+                    ? 'bg-red-600 text-white border-red-600 shadow-sm' 
+                    : 'bg-white text-gray-700 border-gray-300 hover:border-red-300'
+                }`}>
+                  <input
+                    type="radio"
+                    name="confirmSetupOption"
+                    checked={confirmSetup === false}
+                    onChange={() => setConfirmSetup(false)}
+                    className="sr-only"
+                  />
+                  <span>🔴 Không</span>
+                </label>
+              </div>
             </div>
           </>
         )}
