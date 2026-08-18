@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { QRCodeSVG } from 'qrcode.react';
 import { format } from 'date-fns';
+import { getShiftConfigs } from '../services/dataService';
 
 interface AdminDailyQRModalProps {
   isOpen: boolean;
@@ -27,28 +28,19 @@ export default function AdminDailyQRModal({ isOpen, onClose }: AdminDailyQRModal
   let shiftLabel = 'Tất cả các ca (Cả Ngày)';
 
   if (scope === 'shift_window') {
-    if (shiftPreset === 'Ca Sáng') {
-      validFrom = '07:00';
-      validTo = '12:00';
-      shiftLabel = 'Ca Sáng (07:00 - 12:00)';
-    } else if (shiftPreset === 'Ca Chiều') {
-      validFrom = '12:00';
-      validTo = '17:00';
-      shiftLabel = 'Ca Chiều (12:00 - 17:00)';
-    } else if (shiftPreset === 'Ca Tối') {
-      validFrom = '17:00';
-      validTo = '22:00';
-      shiftLabel = 'Ca Tối (17:00 - 22:00)';
-    } else if (shiftPreset === 'Ca Cả Ngày') {
-      validFrom = '07:00';
-      validTo = '22:00';
-      shiftLabel = 'Ca Cả Ngày (07:00 - 22:00)';
+    const shiftConfigs = getShiftConfigs();
+    const matchedShift = shiftConfigs.find(s => s.name === shiftPreset);
+    if (matchedShift) {
+      validFrom = matchedShift.startTime;
+      validTo = matchedShift.endTime;
+      shiftLabel = `${matchedShift.name} (${matchedShift.startTime} - ${matchedShift.endTime})`;
     } else {
       validFrom = customFrom || '07:00';
       validTo = customTo || '18:00';
       shiftLabel = `Khung Giờ Tự Chọn (${validFrom} - ${validTo})`;
     }
   }
+
 
   const qrPayload = `${origin}/?action=qr_scan&type=${qrTypeParam}&date=${currentDate}&scope=${scope}&from=${validFrom}&to=${validTo}&key=${refreshKey}`;
 

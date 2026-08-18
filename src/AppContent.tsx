@@ -7,7 +7,7 @@ import AdminDashboard from './components/AdminDashboard';
 
 function AppContent() {
   const { currentUser, loading, isLocalStorageMode } = useAuth();
-  const [activeTab, setActiveTab] = useState<'tnv-login' | 'tnv-register' | 'admin-login'>('tnv-register');
+  const [activeTab, setActiveTab] = useState<'tnv-login' | 'admin-login'>('tnv-login');
 
   useEffect(() => {
     if (typeof window !== 'undefined') {
@@ -74,38 +74,27 @@ function AppContent() {
         </div>
 
         {/* Home Direct Login / Register Tabs */}
-        <div className="bg-gray-200/80 p-1.5 rounded-2xl grid grid-cols-3 gap-1 text-center shadow-inner">
-          <button
-            onClick={() => setActiveTab('tnv-register')}
-            className={`py-2 text-xs font-bold rounded-xl transition ${
-              activeTab === 'tnv-register'
-                ? 'bg-blue-600 text-white shadow-sm'
-                : 'text-gray-600 hover:text-gray-900'
-            }`}
-          >
-            📝 Đăng Ký TNV
-          </button>
-
+        <div className="bg-gray-200/80 p-1.5 rounded-2xl grid grid-cols-2 gap-1 text-center shadow-inner">
           <button
             onClick={() => setActiveTab('tnv-login')}
-            className={`py-2 text-xs font-bold rounded-xl transition ${
+            className={`py-2.5 text-xs font-bold rounded-xl transition ${
               activeTab === 'tnv-login'
                 ? 'bg-blue-600 text-white shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            🔑 Đăng Nhập
+            🔑 TNV / CTV Đăng Nhập
           </button>
 
           <button
             onClick={() => setActiveTab('admin-login')}
-            className={`py-2 text-xs font-bold rounded-xl transition ${
+            className={`py-2.5 text-xs font-bold rounded-xl transition ${
               activeTab === 'admin-login'
                 ? 'bg-gray-900 text-white shadow-sm'
                 : 'text-gray-600 hover:text-gray-900'
             }`}
           >
-            👑 Admin
+            👑 Quản Trị Admin
           </button>
         </div>
 
@@ -114,9 +103,10 @@ function AppContent() {
           {activeTab === 'admin-login' ? (
             <AdminLogin />
           ) : (
-            <TNVLogin initialIsLogin={activeTab === 'tnv-login'} />
+            <TNVLogin initialIsLogin={true} />
           )}
         </div>
+
       </main>
 
       <footer className="py-4 text-center text-xs text-gray-400 border-t border-gray-100">

@@ -13,6 +13,7 @@ import {
   fetchActiveEventsListAsync, 
   subscribeToRealtimeChanges,
   changeUserPassword,
+  getFormattedShiftList,
 } from '../services/dataService';
 import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
@@ -42,8 +43,11 @@ export default function TNVDashboard() {
   const [selectedDepartment, setSelectedDepartment] = useState(userProfile?.department || 'Hậu cần');
   const [selectedEventId, setSelectedEventId] = useState<string>('');
   const [selectedDate, setSelectedDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
-  const [selectedShift, setSelectedShift] = useState<string>('Ca Sáng (07:00 - 12:00)');
-  const [otHours, setOtHours] = useState<number>(0);
+  const [availableShifts, setAvailableShifts] = useState<string[]>(getFormattedShiftList());
+  const [selectedShift, setSelectedShift] = useState<string>(() => {
+    const list = getFormattedShiftList();
+    return list[0] || 'Ca Sáng (07:00 - 12:00)';
+  });
   const [notes, setNotes] = useState<string>('');
   const [successMessage, setSuccessMessage] = useState('');
 
@@ -106,8 +110,19 @@ export default function TNVDashboard() {
       syncEventsAndDeps();
     });
 
+    const handleShiftConfigUpdate = () => {
+      const list = getFormattedShiftList();
+      setAvailableShifts(list);
+      if (list.length > 0) {
+        setSelectedShift(prev => (list.includes(prev) ? prev : list[0]));
+      }
+    };
+    handleShiftConfigUpdate();
+    window.addEventListener('shift_configs_updated', handleShiftConfigUpdate);
+
     return () => {
       unsubscribe();
+      window.removeEventListener('shift_configs_updated', handleShiftConfigUpdate);
     };
   }, [userProfile?.id]);
 
@@ -175,7 +190,7 @@ export default function TNVDashboard() {
         activeProfile, 
         targetDate, 
         targetShift, 
-        Number(otHours) || 0, 
+        0, 
         (notes || '').trim(),
         targetDept,
         selectedEvt?.id,
@@ -405,10 +420,10 @@ export default function TNVDashboard() {
         {/* Registration Schedule Form */}
         <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6">
           <h2 className="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
-            📅 Đăng Ký Lịch Làm Việc & OT
+            📅 Đăng Ký Lịch Làm Việc
           </h2>
           <p className="text-xs text-gray-500 mb-4">
-            Chọn ngày làm, ca làm việc mặc định và đăng ký số giờ OT làm thêm (nếu có).
+            Chọn ngày làm và ca làm việc đăng ký với Ban Quản Lý.
           </p>
 
           {successMessage && (
@@ -461,35 +476,17 @@ export default function TNVDashboard() {
               />
             </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-              <div>
-                <label className="block text-xs font-bold text-gray-700 mb-1">Chọn Ca Mặc Định:</label>
-                <select
-                  value={selectedShift}
-                  onChange={(e) => setSelectedShift(e.target.value)}
-                  className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                >
-                  <option value="Ca Sáng (07:00 - 12:00)">Ca Sáng (07:00 - 12:00)</option>
-                  <option value="Ca Chiều (13:00 - 17:30)">Ca Chiều (13:00 - 17:30)</option>
-                  <option value="Ca Tối / OT (18:00 - 22:00)">Ca Tối / OT (18:00 - 22:00)</option>
-                  <option value="Ca Cả Ngày (07:00 - 17:30)">Ca Cả Ngày (07:00 - 17:30)</option>
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-xs font-bold text-purple-700 mb-1">Số giờ làm thêm (OT):</label>
-                <select
-                  value={otHours}
-                  onChange={(e) => setOtHours(Number(e.target.value))}
-                  className="w-full px-3.5 py-2.5 border border-purple-300 bg-purple-50/50 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-purple-500"
-                >
-                  <option value={0}>Không có OT (0h)</option>
-                  <option value={1}>1 Giờ OT</option>
-                  <option value={2}>2 Giờ OT</option>
-                  <option value={3}>3 Giờ OT</option>
-                  <option value={4}>4 Giờ OT</option>
-                </select>
-              </div>
+            <div>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Chọn Ca Làm Việc:</label>
+              <select
+                value={selectedShift}
+                onChange={(e) => setSelectedShift(e.target.value)}
+                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+              >
+                {availableShifts.map(s => (
+                  <option key={s} value={s}>{s}</option>
+                ))}
+              </select>
             </div>
 
             <div>

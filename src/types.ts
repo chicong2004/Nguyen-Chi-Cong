@@ -49,4 +49,9 @@ export interface Checkin {
   emailNotifySent?: boolean;
   createdAt: number;
   updatedAt: number;
+}export interface ShiftConfig {
+  id: string;
+  name: string;
+  startTime: string;
+  endTime: string;
 }

@@ -1,5 +1,5 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from '../supabase';
-import { User, Checkin, EventItem } from '../types';
+import { User, Checkin, EventItem, ShiftConfig } from '../types';
 import { format } from 'date-fns';
 import { sendApprovalEmailNotification, getAdminEmailSettings } from './emailService';
 import { pushGlobalCloudData, pullGlobalCloudData } from './cloudSyncService';
@@ -12,7 +12,49 @@ const CUSTOM_DEPARTMENTS_KEY = 'app_custom_departments_v1';
 const CUSTOM_EVENTS_KEY = 'app_custom_events_v1';
 const SYSTEM_DEPTS_ID = '00000000-0000-4000-8000-000000000099';
 const DEPARTMENT_RATES_KEY = 'app_department_rates_v1';
+const SHIFT_CONFIGS_KEY = 'app_shift_configs_v1';
 const GOOGLE_SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwHyPo28ktAc87yPCjtpGA6_DvPpypjom1LCohIr33Z-sDzgR5fzNVeIIBrB3gZn9E1/exec';
+
+export const DEFAULT_SHIFT_CONFIGS: ShiftConfig[] = [
+  { id: 'sang', name: 'Ca Sáng', startTime: '07:00', endTime: '12:00' },
+  { id: 'chieu', name: 'Ca Chiều', startTime: '13:00', endTime: '17:30' },
+  { id: 'toi', name: 'Ca Tối', startTime: '18:00', endTime: '22:00' },
+  { id: 'cangay', name: 'Ca Cả Ngày', startTime: '07:00', endTime: '17:30' },
+];
+
+export function getShiftConfigs(): ShiftConfig[] {
+  try {
+    const raw = localStorage.getItem(SHIFT_CONFIGS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (err) {
+    console.warn("getShiftConfigs error:", err);
+  }
+  return DEFAULT_SHIFT_CONFIGS;
+}
+
+export function saveShiftConfigs(configs: ShiftConfig[]): void {
+  try {
+    localStorage.setItem(SHIFT_CONFIGS_KEY, JSON.stringify(configs));
+    window.dispatchEvent(new Event('shift_configs_updated'));
+  } catch (err) {
+    console.warn("saveShiftConfigs error:", err);
+  }
+}
+
+export function getFormattedShiftLabel(config: ShiftConfig): string {
+  return `${config.name} (${config.startTime} - ${config.endTime})`;
+}
+
+export function getFormattedShiftList(): string[] {
+  const configs = getShiftConfigs();
+  return configs.map(getFormattedShiftLabel);
+}
+
 
 const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
   'Hậu cần': 50000,
