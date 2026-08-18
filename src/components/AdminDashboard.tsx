@@ -136,12 +136,13 @@ export default function AdminDashboard() {
   }, []);
 
   const departments = useMemo(() => {
-    return ['Tất cả', ...departmentsList];
-  }, [departmentsList]);
+    return ['Tất cả', 'Lễ Tân', 'Hậu cần'];
+  }, []);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
-      const matchesTab = activeTab === 'Tất cả' || u.department === activeTab;
+      const userDept = (u.department === 'Lễ Tân' || u.department === 'Hậu cần') ? u.department : 'Hậu cần';
+      const matchesTab = activeTab === 'Tất cả' || userDept === activeTab;
       const term = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || (
         u.fullName.toLowerCase().includes(term) ||
@@ -779,7 +780,7 @@ export default function AdminDashboard() {
                             {/* Initial Registration Department */}
                             <td className="px-4 py-3 align-middle text-center">
                               <span className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold border border-blue-200">
-                                {user.department || 'Lễ Tân'}
+                                {user.department === 'Lễ Tân' ? 'Lễ Tân' : 'Hậu cần'}
                               </span>
                             </td>
 
