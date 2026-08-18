@@ -71,6 +71,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const [password, setPassword] = useState('');
   const [fullName, setFullName] = useState('');
   const [phone, setPhone] = useState('');
+  const [facebookLink, setFacebookLink] = useState('');
   const [department, setDepartment] = useState('Lễ Tân');
   const [confirmSetup, setConfirmSetup] = useState(false);
 
