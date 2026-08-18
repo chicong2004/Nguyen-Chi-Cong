@@ -73,7 +73,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
   const [phone, setPhone] = useState('');
   const [facebookLink, setFacebookLink] = useState('');
   const [department, setDepartment] = useState('Hậu cần');
-  const [notes, setNotes] = useState('');
+
 
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -115,7 +115,7 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
           department: department || 'Hậu cần',
           eventId: selectedEventId || chosenEvt?.id || '',
           eventName: chosenEvt?.name || '',
-          notes: (notes || '').trim(),
+          notes: '',
           password: password.trim(),
         });
         setSuccess('Đăng ký thành công! Đang tự động chuyển đến bảng cá nhân...');
@@ -307,18 +307,6 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
           />
         </div>
 
-        {!isLogin && (
-          <div>
-            <label className="block text-xs font-semibold text-gray-700 mb-1">Ghi chú / Khung giờ rảnh</label>
-            <textarea
-              rows={2}
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="VD: Rảnh các ngày thứ 7 và chủ nhật..."
-              className="w-full px-4 py-2.5 border border-gray-300 rounded-xl focus:ring-2 focus:ring-blue-500 outline-none transition text-xs resize-none"
-            />
-          </div>
-        )}
 
         <button
           type="submit"
