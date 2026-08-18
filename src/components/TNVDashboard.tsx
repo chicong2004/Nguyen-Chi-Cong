@@ -184,7 +184,7 @@ export default function TNVDashboard() {
     try {
       const targetDate = selectedDate || format(new Date(), 'yyyy-MM-dd');
       const targetShift = selectedShift || 'Ca Sáng (07:00 - 12:00)';
-      const targetDept = selectedDepartment || activeProfile.department || 'Hậu cần';
+      const targetDept = activeProfile.department || 'Hậu cần';
       const selectedEvt = eventsList.find(evt => evt.id === selectedEventId) || (eventsList.length > 0 ? eventsList[0] : undefined);
 
       await submitScheduleRegistration(
@@ -196,7 +196,7 @@ export default function TNVDashboard() {
         targetDept,
         selectedEvt?.id,
         selectedEvt?.name,
-        confirmSetup
+        Boolean(activeProfile.confirmSetup)
       );
 
       setSuccessMessage(`Đã gửi đăng ký lịch làm ca (${targetDept} - ${targetDate} - ${targetShift})! Đang chờ Admin duyệt.`);
@@ -451,21 +451,7 @@ export default function TNVDashboard() {
                 </select>
               </div>
             )}
-            <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1 flex items-center justify-between">
-                <span>🏢 Chọn / Đổi Công Việc Cho Ca Này:</span>
-                <span className="text-[10px] text-blue-600 font-semibold">(Có thể đổi theo từng ca)</span>
-              </label>
-              <select
-                value={selectedDepartment}
-                onChange={(e) => setSelectedDepartment(e.target.value)}
-                className="w-full px-3.5 py-2.5 border border-gray-300 rounded-xl text-xs font-bold outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-              >
-                {departmentsList.map(dep => (
-                  <option key={dep} value={dep}>{dep}</option>
-                ))}
-              </select>
-            </div>
+
 
             <div>
               <label className="block text-xs font-bold text-gray-700 mb-1">Chọn Ngày Làm Việc:</label>
@@ -502,36 +488,6 @@ export default function TNVDashboard() {
               />
             </div>
 
-            <div className="p-3.5 bg-purple-50/70 rounded-2xl border border-purple-200 space-y-2">
-              <label className="block text-xs font-bold text-purple-900">
-                ⚡ Xác nhận tham gia setup trước 1 ngày? <span className="text-red-500">*</span>
-              </label>
-              <div className="grid grid-cols-2 gap-2">
-                <button
-                  type="button"
-                  onClick={() => setConfirmSetup(true)}
-                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition ${
-                    confirmSetup === true 
-                      ? 'bg-purple-600 text-white border-purple-600 shadow-sm' 
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-purple-300'
-                  }`}
-                >
-                  🟢 Có
-                </button>
-
-                <button
-                  type="button"
-                  onClick={() => setConfirmSetup(false)}
-                  className={`flex items-center justify-center gap-2 p-2.5 rounded-xl border text-xs font-bold transition ${
-                    confirmSetup === false 
-                      ? 'bg-red-600 text-white border-red-600 shadow-sm' 
-                      : 'bg-white text-gray-700 border-gray-300 hover:border-red-300'
-                  }`}
-                >
-                  🔴 Không
-                </button>
-              </div>
-            </div>
 
             <button
               type="submit"
