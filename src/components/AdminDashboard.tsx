@@ -12,6 +12,7 @@ import {
   updateCheckinAdminNote,
   getDepartmentsList,
   fetchDepartmentsListAsync,
+  getDepartmentRate,
   calculateShiftPay,
   calculateMeals,
   rejectCheckinItem,
