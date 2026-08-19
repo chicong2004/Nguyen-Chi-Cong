@@ -5,7 +5,9 @@ import {
   addDepartmentAsync,
   deleteDepartmentAsync,
   updateDepartmentAllowanceAsync,
-  saveDepartmentsAndRatesAsync
+  saveDepartmentsAndRatesAsync,
+  getOtHourlyRate,
+  saveOtHourlyRate
 } from '../services/dataService';
 
 interface AdminDepartmentModalProps {
@@ -18,10 +20,12 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
   const [departmentItems, setDepartmentItems] = useState<DepartmentItem[]>([]);
   const [newDepName, setNewDepName] = useState('');
   const [newDepRate, setNewDepRate] = useState<number>(50000);
+  const [otRate, setOtRate] = useState<number>(25000);
 
   const loadData = async () => {
     const items = await fetchDepartmentsWithDetailsAsync();
     setDepartmentItems(items);
+    setOtRate(getOtHourlyRate());
   };
 
   useEffect(() => {
@@ -40,6 +44,12 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
     const rates: Record<string, number> = {};
     updated.forEach(u => { rates[u.name] = u.allowance; });
     await saveDepartmentsAndRatesAsync(deps, rates);
+    onSaved();
+  };
+
+  const handleOtRateChange = (rate: number) => {
+    setOtRate(rate);
+    saveOtHourlyRate(rate);
     onSaved();
   };
 
@@ -82,6 +92,25 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
         <p className="text-xs text-gray-500 mb-4">
           Thiết lập danh sách công việc/bộ phận, định mức thù lao/ca (VND) và chi phí làm thêm (OT) cho nhân sự.
         </p>
+
+        {/* Global OT Rate Config */}
+        <div className="mb-4 p-3.5 bg-purple-50/70 rounded-2xl border border-purple-100 flex items-center justify-between gap-3 shadow-2xs">
+          <div>
+            <label className="block text-xs font-black text-purple-950">⚡ Định Mức Thù Lao Làm Thêm (OT)</label>
+            <p className="text-[11px] text-purple-700 font-medium">Chi trả thêm trên mỗi giờ OT của TNV</p>
+          </div>
+          <div className="flex items-center gap-1.5 shrink-0">
+            <input
+              type="number"
+              step={5000}
+              min={0}
+              value={otRate}
+              onChange={(e) => handleOtRateChange(Number(e.target.value))}
+              className="w-28 px-3 py-1.5 bg-white border border-purple-300 font-black text-purple-800 rounded-xl text-xs outline-none focus:ring-2 focus:ring-purple-500 text-right shadow-2xs"
+            />
+            <span className="text-xs font-bold text-purple-700">VND/giờ</span>
+          </div>
+        </div>
 
         {/* Add Department Form */}
         <form onSubmit={handleAdd} className="grid grid-cols-1 sm:grid-cols-12 gap-2 mb-4 bg-blue-50/60 p-3 rounded-2xl border border-blue-100">

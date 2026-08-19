@@ -13,6 +13,7 @@ const CUSTOM_EVENTS_KEY = 'app_custom_events_v1';
 const SYSTEM_DEPTS_ID = '00000000-0000-4000-8000-000000000099';
 const DEPARTMENT_RATES_KEY = 'app_department_rates_v1';
 const SHIFT_CONFIGS_KEY = 'app_shift_configs_v1';
+const OT_HOURLY_RATE_KEY = 'app_ot_hourly_rate_v1';
 const GOOGLE_SHEETS_WEBAPP_URL = 'https://script.google.com/macros/s/AKfycbwHyPo28ktAc87yPCjtpGA6_DvPpypjom1LCohIr33Z-sDzgR5fzNVeIIBrB3gZn9E1/exec';
 
 export const DEFAULT_SHIFT_CONFIGS: ShiftConfig[] = [
@@ -458,12 +459,36 @@ export function getDepartmentRate(deptName: string): number {
   return 50000;
 }
 
-export function calculateShiftPay(shiftName: string, salaryRate: number, otHours: number = 0, otHourlyRate: number = 25000): number {
+export function getOtHourlyRate(): number {
+  try {
+    const raw = localStorage.getItem(OT_HOURLY_RATE_KEY);
+    if (raw !== null && !isNaN(Number(raw))) {
+      return Number(raw);
+    }
+  } catch {}
+  return 25000;
+}
+
+export function saveOtHourlyRate(rate: number): void {
+  try {
+    localStorage.setItem(OT_HOURLY_RATE_KEY, String(rate));
+  } catch {}
+  if (isSupabaseActive()) {
+    supabase.from('system_settings').upsert({
+      key: 'ot_hourly_rate',
+      value: rate,
+      updated_at: Date.now(),
+    }).catch(err => console.warn("Supabase OT rate sync notice:", err));
+  }
+}
+
+export function calculateShiftPay(shiftName: string, salaryRate: number, otHours: number = 0, otHourlyRate?: number): number {
+  const rateToUse = otHourlyRate !== undefined ? otHourlyRate : getOtHourlyRate();
   const baseRate = Number(salaryRate) || 50000;
   const isFullDay = (shiftName || '').includes('Cả Ngày') || (shiftName || '').toLowerCase().includes('full');
   const multiplier = isFullDay ? 2 : 1;
   const shiftBasePay = baseRate * multiplier;
-  const otPay = (Number(otHours) || 0) * otHourlyRate;
+  const otPay = (Number(otHours) || 0) * rateToUse;
   return shiftBasePay + otPay;
 }
 
@@ -666,6 +691,9 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
   if (user.confirmSetup !== undefined) {
     meta.s = Boolean(user.confirmSetup);
   }
+  if (user.workRole) {
+    meta.w = user.workRole;
+  }
   if (Object.keys(meta).length > 0) {
     finalNotes = `${finalNotes}||__ADJ__:${JSON.stringify(meta)}`;
   }
@@ -678,6 +706,7 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     phone: user.phone || '',
     facebook_link: user.facebookLink || '',
     department: user.department || 'Hậu cần',
+    work_role: user.workRole || user.department || 'Hậu cần',
     event_id: user.eventId || null,
     event_name: user.eventName || null,
     salary_rate: user.salaryRate || 50000,
@@ -939,6 +968,8 @@ export async function fetchAllUsers(): Promise<User[]> {
             localStorage.setItem(DEPARTMENT_RATES_KEY, JSON.stringify(st.value));
           } else if (st.key === 'events' && Array.isArray(st.value)) {
             localStorage.setItem(CUSTOM_EVENTS_KEY, JSON.stringify(st.value));
+          } else if (st.key === 'ot_hourly_rate' && (typeof st.value === 'number' || typeof st.value === 'string')) {
+            localStorage.setItem(OT_HOURLY_RATE_KEY, String(st.value));
           }
         });
       }
@@ -979,6 +1010,8 @@ export async function fetchAllUsers(): Promise<User[]> {
           let parsedPassword = d.password || d.pass || '';
 
           let parsedConfirmSetup = Boolean(d.confirm_setup || d.confirmSetup);
+          let parsedWorkRole = d.work_role || d.workRole || '';
+
           if (typeof rawNotes === 'string' && rawNotes.includes('||__ADJ__:')) {
             const parts = rawNotes.split('||__ADJ__:');
             rawNotes = parts[0];
@@ -988,6 +1021,7 @@ export async function fetchAllUsers(): Promise<User[]> {
               if (!parsedAdjNote && parsed.n !== undefined) parsedAdjNote = parsed.n;
               if (!parsedPassword && parsed.p) parsedPassword = parsed.p;
               if (parsed.s !== undefined) parsedConfirmSetup = Boolean(parsed.s);
+              if (!parsedWorkRole && parsed.w) parsedWorkRole = parsed.w;
             } catch {}
           }
 
@@ -999,6 +1033,7 @@ export async function fetchAllUsers(): Promise<User[]> {
             phone: d.phone || d.phoneNumber || '',
             facebookLink: d.facebook_link || d.facebookLink || '',
             department: d.department || 'Lễ Tân',
+            workRole: parsedWorkRole || d.department || 'Lễ Tân',
             eventId: d.event_id || d.eventId || '',
             eventName: d.event_name || d.eventName || '',
             notes: rawNotes,
@@ -1396,6 +1431,7 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
     if (data.phone !== undefined) user.phone = data.phone;
     if (data.facebookLink !== undefined) user.facebookLink = data.facebookLink;
     if (data.department !== undefined) user.department = data.department;
+    if (data.workRole !== undefined) user.workRole = data.workRole;
     if (data.notes !== undefined) user.notes = data.notes;
     if (data.salaryRate !== undefined) user.salaryRate = data.salaryRate;
     if (data.adjustmentAmount !== undefined) user.adjustmentAmount = data.adjustmentAmount;
@@ -1426,15 +1462,23 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
       if (data.phone !== undefined) updatePayload.phone = data.phone;
       if (data.facebookLink !== undefined) updatePayload.facebook_link = data.facebookLink;
       if (data.department !== undefined) updatePayload.department = data.department;
+      if (data.workRole !== undefined) updatePayload.work_role = data.workRole;
       if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
 
       const targetUser = user || getLocalUsers().find(u => u.id === userId);
       const adj = data.adjustmentAmount !== undefined ? data.adjustmentAmount : (targetUser?.adjustmentAmount || 0);
       const adjNote = data.adjustmentNote !== undefined ? data.adjustmentNote : (targetUser?.adjustmentNote || '');
       const baseNote = data.notes !== undefined ? data.notes : (targetUser?.notes || '');
+      const workRole = data.workRole !== undefined ? data.workRole : (targetUser?.workRole || '');
 
-      if (adj || adjNote) {
-        updatePayload.notes = `${baseNote}||__ADJ__:${JSON.stringify({ a: adj, n: adjNote })}`;
+      const meta: any = {};
+      if (adj || adjNote) { meta.a = adj; meta.n = adjNote; }
+      if (workRole) { meta.w = workRole; }
+      if (targetUser?.password) { meta.p = targetUser.password; }
+      if (targetUser?.confirmSetup !== undefined) { meta.s = Boolean(targetUser.confirmSetup); }
+
+      if (Object.keys(meta).length > 0) {
+        updatePayload.notes = `${baseNote}||__ADJ__:${JSON.stringify(meta)}`;
       } else if (data.notes !== undefined) {
         updatePayload.notes = data.notes;
       }

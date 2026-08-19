@@ -9,7 +9,8 @@ import {
   getDepartmentsList,
   getEventsList,
   getDepartmentRate,
-  updateUserProfileByAdmin
+  updateUserProfileByAdmin,
+  getOtHourlyRate
 } from '../services/dataService';
 import { format } from 'date-fns';
 
@@ -153,7 +154,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
             <div>
               <span className="text-[11px] text-gray-500 font-medium block">Tổng chi phí OT</span>
               <span className="text-base font-black text-purple-700">
-                +{approvedCheckins.reduce((otSum, c) => otSum + ((Number(c.otHours) || 0) * 25000), 0).toLocaleString()}đ
+                +{approvedCheckins.reduce((otSum, c) => otSum + ((Number(c.otHours) || 0) * getOtHourlyRate()), 0).toLocaleString()}đ
               </span>
             </div>
             <div>
