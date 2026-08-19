@@ -706,7 +706,6 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     phone: user.phone || '',
     facebook_link: user.facebookLink || '',
     department: user.department || 'Hậu cần',
-    work_role: user.workRole || user.department || 'Hậu cần',
     event_id: user.eventId || null,
     event_name: user.eventName || null,
     salary_rate: user.salaryRate || 50000,
@@ -1462,7 +1461,6 @@ export async function updateUserProfileByAdmin(userId: string, data: Partial<Use
       if (data.phone !== undefined) updatePayload.phone = data.phone;
       if (data.facebookLink !== undefined) updatePayload.facebook_link = data.facebookLink;
       if (data.department !== undefined) updatePayload.department = data.department;
-      if (data.workRole !== undefined) updatePayload.work_role = data.workRole;
       if (data.salaryRate !== undefined) updatePayload.salary_rate = data.salaryRate;
 
       const targetUser = user || getLocalUsers().find(u => u.id === userId);
