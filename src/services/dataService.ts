@@ -842,6 +842,41 @@ export async function registerTNV(payload: {
   return newUser;
 }
 
+export async function checkUserEventStatus(user: User): Promise<{ isArchived: boolean; eventName?: string }> {
+  if (!user || user.role === 'admin') return { isArchived: false };
+
+  const events = await fetchEventsListAsync();
+  if (!events || events.length === 0) return { isArchived: false };
+
+  let userEvent = events.find(e => user.eventId && e.id === user.eventId);
+
+  if (!userEvent && user.eventName) {
+    userEvent = events.find(e => e.name.trim().toLowerCase() === user.eventName!.trim().toLowerCase());
+  }
+
+  if (!userEvent && user.id) {
+    try {
+      const checkins = await fetchCheckins(user.id);
+      for (const c of checkins) {
+        if (c.eventId) {
+          const found = events.find(e => e.id === c.eventId);
+          if (found) { userEvent = found; break; }
+        }
+        if (c.eventName) {
+          const found = events.find(e => e.name.trim().toLowerCase() === c.eventName!.trim().toLowerCase());
+          if (found) { userEvent = found; break; }
+        }
+      }
+    } catch {}
+  }
+
+  if (userEvent && userEvent.status === 'archived') {
+    return { isArchived: true, eventName: userEvent.name };
+  }
+
+  return { isArchived: false };
+}
+
 export async function loginTNV(email: string, password?: string): Promise<User> {
   const users = await fetchAllUsers();
   const cleanEmail = (email || '').trim().toLowerCase();
@@ -855,6 +890,12 @@ export async function loginTNV(email: string, password?: string): Promise<User> 
     if (cleanPass !== user.password.trim()) {
       throw new Error('Mật khẩu không chính xác. Vui lòng kiểm tra lại hoặc bấm "Quên mật khẩu"!');
     }
+  }
+
+  // Check if TNV user's event is locked/archived
+  const eventStatus = await checkUserEventStatus(user);
+  if (eventStatus.isArchived) {
+    throw new Error(`Sự kiện "${eventStatus.eventName || 'đã đăng ký'}" hiện đang bị Admin khóa. Tài khoản thuộc sự kiện này không thể đăng nhập trừ khi Admin mở lại sự kiện.`);
   }
 
   if (cleanPass && !user.password) {
@@ -886,6 +927,11 @@ export async function resetPasswordWithEmailAndPhone(email: string, phone: strin
 
   if (!user) {
     throw new Error('Không tìm thấy tài khoản phù hợp với Email và Số điện thoại này. Vui lòng kiểm tra lại thông tin!');
+  }
+
+  const eventStatus = await checkUserEventStatus(user);
+  if (eventStatus.isArchived) {
+    throw new Error(`Sự kiện "${eventStatus.eventName || 'đã đăng ký'}" hiện đang bị Admin khóa. Không thể đổi mật khẩu tài khoản thuộc sự kiện bị khóa.`);
   }
 
   user.password = cleanNewPass;

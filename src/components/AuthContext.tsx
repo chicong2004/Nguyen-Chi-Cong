@@ -10,7 +10,8 @@ import {
   fetchAllUsers,
   fetchEventsListAsync,
   fetchDepartmentsListAsync,
-  subscribeToRealtimeChanges
+  subscribeToRealtimeChanges,
+  checkUserEventStatus,
 } from '../services/dataService';
 
 interface AuthContextType {
@@ -48,7 +49,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
     try {
       const local = getLocalSession();
       if (local) {
-        setCurrentUser(local);
+        let activeUser = local;
         // Always refresh latest user profile from Cloud Supabase to prevent stale mobile cache
         if (isSupabaseActive()) {
           try {
@@ -58,13 +59,27 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
               (u.email && local.email && u.email.toLowerCase() === local.email.toLowerCase())
             );
             if (found) {
-              setCurrentUser(found);
-              setLocalSession(found);
+              activeUser = found;
             }
           } catch (e) {
             console.warn("Notice syncing mobile profile from cloud:", e);
           }
         }
+
+        // Check if event is locked for TNV
+        if (activeUser.role === 'tnv') {
+          const eventStatus = await checkUserEventStatus(activeUser);
+          if (eventStatus.isArchived) {
+            setLocalSession(null);
+            setCurrentUser(null);
+            setLoading(false);
+            alert(`Sự kiện "${eventStatus.eventName || 'đã đăng ký'}" hiện đang bị Admin khóa. Tài khoản đã tự động đăng xuất.`);
+            return;
+          }
+        }
+
+        setCurrentUser(activeUser);
+        setLocalSession(activeUser);
         setLoading(false);
         return;
       }

@@ -12,6 +12,7 @@ import {
   subscribeToRealtimeChanges,
   changeUserPassword,
   getFormattedShiftList,
+  checkUserEventStatus,
 } from '../services/dataService';
 import { Checkin, User, EventItem } from '../types';
 import { format } from 'date-fns';
@@ -56,6 +57,14 @@ export default function TNVDashboard() {
   const loadUserData = async () => {
     if (!activeProfile?.id) return;
     try {
+      // 0. Check if user's event is locked by Admin
+      const eventStatus = await checkUserEventStatus(activeProfile);
+      if (eventStatus.isArchived) {
+        alert(`Sự kiện "${eventStatus.eventName || 'đã chọn'}" hiện đang bị Admin khóa. Tài khoản tự động đăng xuất.`);
+        await logout();
+        return;
+      }
+
       // 1. Fetch updated users to sync latest profile, departments & events configured by Admin
       const allUsers = await fetchAllUsers();
       const updatedProfile = allUsers.find(u => u.id === activeProfile.id);
