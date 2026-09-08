@@ -10,7 +10,8 @@ import {
   getEventsList,
   getDepartmentRate,
   updateUserProfileByAdmin,
-  getOtHourlyRate
+  getOtHourlyRate,
+  addCustomShiftByAdmin
 } from '../services/dataService';
 import { format } from 'date-fns';
 
@@ -25,9 +26,19 @@ interface AdminUserDetailModalProps {
 export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, onDataChanged }: AdminUserDetailModalProps) {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [isEditingAdjustment, setIsEditingAdjustment] = useState(false);
-  const [salaryRateInput, setSalaryRateInput] = useState<number>(user?.salaryRate || 50000);
+  const [salaryRateInput, setSalaryRateInput] = useState<number>(user?.salaryRate !== undefined ? user.salaryRate : 0);
   const [adjAmountInput, setAdjAmountInput] = useState<number>(user?.adjustmentAmount || 0);
   const [adjNoteInput, setAdjNoteInput] = useState<string>(user?.adjustmentNote || '');
+  
+  // Custom Shift Addition State
+  const [isAddingCustomShift, setIsAddingCustomShift] = useState(false);
+  const [newWorkDate, setNewWorkDate] = useState(format(new Date(), 'yyyy-MM-dd'));
+  const [newShiftName, setNewShiftName] = useState('Ca Sáng (07:00 - 12:00)');
+  const [newDepartment, setNewDepartment] = useState(user?.department || 'Hậu cần');
+  const [newEventId, setNewEventId] = useState(user?.eventId || '');
+  const [newOtHours, setNewOtHours] = useState(0);
+  const [newAdminNote, setNewAdminNote] = useState('');
+  const [newStatus, setNewStatus] = useState<'approved' | 'pending'>('approved');
   
   // Shift Edit Form State
   const [editWorkDate, setEditWorkDate] = useState('');
@@ -48,6 +59,25 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
   const totalSalary = approvedShiftPay + (user.adjustmentAmount || 0);
   const departments = getDepartmentsList();
   const events = getEventsList();
+
+  const handleAddCustomShift = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const selectedEvt = events.find(ev => ev.id === newEventId);
+    await addCustomShiftByAdmin({
+      userId: user.id,
+      fullName: user.fullName,
+      department: newDepartment || user.department,
+      workDate: newWorkDate || format(new Date(), 'yyyy-MM-dd'),
+      shiftName: newShiftName,
+      otHours: Number(newOtHours) || 0,
+      eventId: newEventId || undefined,
+      eventName: selectedEvt ? selectedEvt.name : undefined,
+      adminNote: newAdminNote,
+      status: newStatus,
+    });
+    setIsAddingCustomShift(false);
+    onDataChanged();
+  };
 
   const handleSaveAdjustment = async () => {
     await updateUserProfileByAdmin(user.id, {
@@ -149,7 +179,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
             </div>
             <div>
               <span className="text-[11px] text-gray-500 font-medium block">Mức lương công việc</span>
-              <span className="text-base font-black text-gray-800">{(user.salaryRate || 50000).toLocaleString()}đ/ca</span>
+              <span className="text-base font-black text-gray-800">{(user.salaryRate !== undefined ? user.salaryRate : 0).toLocaleString()}đ/ca</span>
             </div>
             <div>
               <span className="text-[11px] text-gray-500 font-medium block">Tổng chi phí OT</span>
@@ -169,7 +199,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
             </div>
             <button
               onClick={() => {
-                setSalaryRateInput(user.salaryRate || 50000);
+                setSalaryRateInput(user.salaryRate !== undefined ? user.salaryRate : 0);
                 setIsEditingAdjustment(!isEditingAdjustment);
               }}
               className="px-2.5 py-1 bg-purple-600 text-white rounded-lg font-bold text-[11px] hover:bg-purple-700 transition shrink-0"
@@ -235,9 +265,134 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
 
         {/* List of Registered Shifts */}
         <div className="flex-1 overflow-y-auto pr-1 space-y-3">
-          <h4 className="font-bold text-xs text-gray-700 uppercase tracking-wider">
-            📅 Danh sách ca đăng ký ({userCheckins.length})
-          </h4>
+          <div className="flex items-center justify-between">
+            <h4 className="font-bold text-xs text-gray-700 uppercase tracking-wider">
+              📅 Danh sách ca đăng ký ({userCheckins.length})
+            </h4>
+            <button
+              onClick={() => setIsAddingCustomShift(!isAddingCustomShift)}
+              className="px-3 py-1 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-2xs transition flex items-center gap-1"
+            >
+              {isAddingCustomShift ? '✕ Đóng' : '➕ Thêm Ca Làm Tùy Chỉnh'}
+            </button>
+          </div>
+
+          {/* Add Custom Shift Form */}
+          {isAddingCustomShift && (
+            <form onSubmit={handleAddCustomShift} className="p-4 bg-purple-50/80 rounded-2xl border border-purple-200 shadow-sm space-y-3 mb-3">
+              <div className="font-bold text-xs text-purple-900 flex items-center justify-between border-b border-purple-200 pb-2">
+                <span>➕ Thêm Ca Làm Việc Mới Tùy Chỉnh cho {user.fullName}</span>
+                <button type="button" onClick={() => setIsAddingCustomShift(false)} className="text-gray-400 hover:text-gray-700">✕</button>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Ngày làm việc</label>
+                  <input
+                    type="date"
+                    value={newWorkDate}
+                    onChange={(e) => setNewWorkDate(e.target.value)}
+                    required
+                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-purple-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Ca làm việc</label>
+                  <input
+                    type="text"
+                    value={newShiftName}
+                    onChange={(e) => setNewShiftName(e.target.value)}
+                    placeholder="VD: Ca Sáng (07:00 - 12:00) hoặc Ca Tùy Chỉnh"
+                    required
+                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-purple-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Bộ phận / Công việc</label>
+                  <select
+                    value={newDepartment}
+                    onChange={(e) => setNewDepartment(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-purple-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    {departments.map(d => (
+                      <option key={d} value={d}>{d}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Giờ OT làm thêm</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={12}
+                    value={newOtHours}
+                    onChange={(e) => setNewOtHours(Number(e.target.value))}
+                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-purple-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Sự kiện</label>
+                  <select
+                    value={newEventId}
+                    onChange={(e) => setNewEventId(e.target.value)}
+                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-purple-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">-- Chọn sự kiện --</option>
+                    {events.map(evt => (
+                      <option key={evt.id} value={evt.id}>{evt.name}</option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Trạng thái duyệt</label>
+                  <select
+                    value={newStatus}
+                    onChange={(e) => setNewStatus(e.target.value as 'approved' | 'pending')}
+                    className="w-full px-2.5 py-1.5 text-xs font-bold border border-purple-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="approved">✓ Đã Duyệt Lịch</option>
+                    <option value="pending">⏳ Chờ Duyệt</option>
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-[10px] font-bold text-purple-900 mb-0.5">Ghi chú Admin</label>
+                <input
+                  type="text"
+                  value={newAdminNote}
+                  onChange={(e) => setNewAdminNote(e.target.value)}
+                  placeholder="Ghi chú cho ca này (VD: Admin thêm thủ công)..."
+                  className="w-full px-2.5 py-1.5 text-xs border border-purple-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-purple-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-1">
+                <button
+                  type="button"
+                  onClick={() => setIsAddingCustomShift(false)}
+                  className="px-3 py-1 bg-gray-200 text-gray-700 font-bold text-xs rounded-lg"
+                >
+                  Hủy
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 py-1 bg-purple-600 text-white font-bold text-xs rounded-lg shadow-sm hover:bg-purple-700"
+                >
+                  ➕ Lưu Ca Làm Tùy Chỉnh
+                </button>
+              </div>
+            </form>
+          )}
 
           {userCheckins.length === 0 ? (
             <div className="text-center py-8 text-xs text-gray-400 italic">

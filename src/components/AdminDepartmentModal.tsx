@@ -19,7 +19,7 @@ interface AdminDepartmentModalProps {
 export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: AdminDepartmentModalProps) {
   const [departmentItems, setDepartmentItems] = useState<DepartmentItem[]>([]);
   const [newDepName, setNewDepName] = useState('');
-  const [newDepRate, setNewDepRate] = useState<number>(50000);
+  const [newDepRate, setNewDepRate] = useState<number>(0);
   const [otRate, setOtRate] = useState<number>(25000);
 
   const loadData = async () => {
@@ -57,11 +57,11 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
     e.preventDefault();
     const name = newDepName.trim();
     if (name && !departmentItems.some(d => d.name === name)) {
-      const rate = Number(newDepRate) || 50000;
+      const rate = typeof newDepRate === 'number' && !isNaN(newDepRate) ? newDepRate : 0;
       await addDepartmentAsync(name, rate);
       await loadData();
       setNewDepName('');
-      setNewDepRate(50000);
+      setNewDepRate(0);
       onSaved();
     }
   };
@@ -146,7 +146,7 @@ export default function AdminDepartmentModal({ isOpen, onClose, onSaved }: Admin
         {/* Department List with Rate inputs */}
         <div className="space-y-2.5 max-h-72 overflow-y-auto pr-1">
           {departmentItems.map(item => {
-            const currentRate = item.allowance !== undefined ? item.allowance : 50000;
+            const currentRate = item.allowance !== undefined ? item.allowance : 0;
             return (
               <div key={item.id || item.name} className="flex flex-col sm:flex-row sm:items-center justify-between p-3 bg-gray-50 rounded-xl border border-gray-200 gap-2">
                 <span className="text-xs font-bold text-gray-900 sm:w-1/3 truncate">{item.name}</span>

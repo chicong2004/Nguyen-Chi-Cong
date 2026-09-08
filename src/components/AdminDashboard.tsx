@@ -137,12 +137,12 @@ export default function AdminDashboard() {
   }, []);
 
   const departments = useMemo(() => {
-    return ['Tất cả', 'Lễ Tân', 'Hậu cần'];
-  }, []);
+    return ['Tất cả', ...departmentsList];
+  }, [departmentsList]);
 
   const filteredUsers = useMemo(() => {
     return users.filter(u => {
-      const userDept = (u.department === 'Lễ Tân' || u.department === 'Hậu cần') ? u.department : 'Hậu cần';
+      const userDept = u.department || 'Hậu cần';
       const matchesTab = activeTab === 'Tất cả' || userDept === activeTab;
       const term = searchTerm.toLowerCase();
       const matchesSearch = !searchTerm || (
@@ -189,37 +189,71 @@ export default function AdminDashboard() {
 
   const [selectedMealDate, setSelectedMealDate] = useState<string>(format(new Date(), 'yyyy-MM-dd'));
 
-  const totalMealStats = useMemo(() => {
-    let lunch = 0;
-    let dinner = 0;
-    const targetDate = selectedMealDate || format(new Date(), 'yyyy-MM-dd');
+  const eventMetrics = useMemo(() => {
+    if (selectedEventFilter === 'all') return null;
 
-    const dateCheckins = checkins.filter(c => {
+    const targetEvt = eventsList.find(e => e.id === selectedEventFilter);
+    const targetEvtName = targetEvt?.name;
+
+    const eventUsers = users.filter(u => {
+      const hasMatchingCheckin = checkins.some(c => 
+        (c.userId === u.id || (c.fullName && u.fullName && c.fullName.trim().toLowerCase() === u.fullName.trim().toLowerCase())) && (
+          c.eventId === selectedEventFilter || 
+          (targetEvtName && c.eventName === targetEvtName)
+        )
+      );
+      const hasMatchingUserEvent = u.eventId === selectedEventFilter || 
+        (targetEvtName && u.eventName === targetEvtName);
+
+      return hasMatchingCheckin || hasMatchingUserEvent;
+    });
+
+    const eventCheckins = checkins.filter(c => 
+      c.eventId === selectedEventFilter || 
+      (targetEvtName && c.eventName === targetEvtName)
+    );
+
+    const approvedCheckins = eventCheckins.filter(c => c.status === 'approved');
+    const pendingCheckins = eventCheckins.filter(c => c.status === 'pending');
+
+    const approvedShiftsPay = approvedCheckins.reduce((sum, c) => {
+      const user = users.find(u => u.id === c.userId || (u.fullName && c.fullName && u.fullName.trim().toLowerCase() === c.fullName.trim().toLowerCase()));
+      const rate = user?.salaryRate !== undefined ? user.salaryRate : 0;
+      return sum + calculateShiftPay(c.shiftName || '', rate, c.otHours);
+    }, 0);
+
+    const adjustments = eventUsers.reduce((sum, u) => sum + (u.adjustmentAmount || 0), 0);
+    const totalPayroll = approvedShiftsPay + adjustments;
+
+    const targetDate = selectedMealDate || format(new Date(), 'yyyy-MM-dd');
+    const dateCheckins = eventCheckins.filter(c => {
       const cDate = c.workDate || format(c.createdAt, 'yyyy-MM-dd');
       return cDate === targetDate;
     });
 
-    // Gom nhóm danh sách ca làm theo từng người trong ngày targetDate
+    let lunch = 0;
+    let dinner = 0;
     const userCheckinsMap = new Map<string, Checkin[]>();
     dateCheckins.forEach(c => {
       const uKey = c.userId || c.fullName;
-      if (!userCheckinsMap.has(uKey)) {
-        userCheckinsMap.set(uKey, []);
-      }
+      if (!userCheckinsMap.has(uKey)) userCheckinsMap.set(uKey, []);
       userCheckinsMap.get(uKey)!.push(c);
     });
 
-    // Quy tắc: 1 người/ngày đăng ký Ca Sáng/Chiều = 1 suất ăn trưa; chỉ ai có OT Tối mới +1 suất ăn tối
     userCheckinsMap.forEach(userShifts => {
       const hasEveningOT = userShifts.some(s => Number(s.otHours) > 0 || (s.shiftName || '').includes('Tối') || (s.shiftName || '').toLowerCase().includes('ot'));
       lunch += 1;
-      if (hasEveningOT) {
-        dinner += 1;
-      }
+      if (hasEveningOT) dinner += 1;
     });
 
-    return { lunch, dinner, total: lunch + dinner, targetDate };
-  }, [checkins, selectedMealDate]);
+    return {
+      totalUsers: eventUsers.length,
+      pendingCheckins: pendingCheckins.length,
+      approvedCheckins: approvedCheckins.length,
+      totalPayroll,
+      meals: { lunch, dinner, total: lunch + dinner },
+    };
+  }, [selectedEventFilter, eventsList, users, checkins, selectedMealDate]);
 
   const handleApproveSingle = async (checkin: Checkin) => {
     try {
@@ -271,6 +305,11 @@ export default function AdminDashboard() {
       console.error(err);
       alert("Lỗi khi duyệt hàng loạt.");
     }
+  };
+
+  const handleRegisteredDepartmentChangeInline = async (userId: string, newDept: string) => {
+    await updateUserProfileByAdmin(userId, { department: newDept });
+    await loadAllData();
   };
 
   const handleDepartmentChangeInline = async (userId: string, newWork: string) => {
@@ -481,48 +520,7 @@ export default function AdminDashboard() {
           </div>
         )}
 
-        {/* Metric Cards & Meals Stat Card */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-gray-400 uppercase tracking-wider">Tổng TNV Đăng ký</span>
-            <div className="text-3xl font-black text-gray-900 mt-2">{users.length} <span className="text-sm font-normal text-gray-500">người</span></div>
-          </div>
 
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-amber-500 uppercase tracking-wider">Lịch chờ Admin duyệt</span>
-            <div className="text-3xl font-black text-amber-600 mt-2">{totalPendingCheckins} <span className="text-sm font-normal text-gray-500">lịch</span></div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-emerald-500 uppercase tracking-wider">Lịch đã duyệt & gửi Mail</span>
-            <div className="text-3xl font-black text-emerald-600 mt-2">{totalApprovedCheckins} <span className="text-sm font-normal text-gray-500">lịch</span></div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-gray-200 shadow-sm">
-            <span className="text-xs font-bold text-blue-500 uppercase tracking-wider">Tổng chi phí phụ cấp</span>
-            <div className="text-3xl font-black text-blue-600 mt-2">{totalPayroll.toLocaleString()} <span className="text-xs font-normal text-gray-500">VND</span></div>
-          </div>
-
-          <div className="bg-white p-5 rounded-2xl border border-orange-200 bg-orange-50/20 shadow-sm">
-            <div className="flex items-center justify-between gap-1 mb-1">
-              <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wider block">🍱 Suất Ăn Theo Ngày</span>
-              <input
-                type="date"
-                value={selectedMealDate}
-                onChange={(e) => setSelectedMealDate(e.target.value)}
-                className="text-[11px] font-bold border border-orange-200 rounded-lg px-1.5 py-0.5 bg-white text-gray-700 outline-none focus:ring-1 focus:ring-orange-500 cursor-pointer"
-                title="Chọn ngày xem suất ăn (Mặc định: Hôm nay, tự động reset qua ngày mới)"
-              />
-            </div>
-            <div className="text-3xl font-black text-orange-600 mt-1">
-              {totalMealStats.total} <span className="text-xs font-normal text-gray-500">suất</span>
-            </div>
-            <div className="mt-1 flex items-center justify-between text-[11px] text-gray-500 font-bold border-t border-orange-100 pt-1">
-              <span className="text-amber-800">🌞 Trưa: {totalMealStats.lunch}</span>
-              <span className="text-purple-800">🌙 Tối: {totalMealStats.dinner}</span>
-            </div>
-          </div>
-        </div>
 
         {/* EVENT MANAGEMENT VIEW MODES */}
         {selectedEventFilter === 'all' ? (
@@ -667,6 +665,50 @@ export default function AdminDashboard() {
               </div>
             </div>
 
+            {/* Event-Specific Compact Metric Cards */}
+            {eventMetrics && (
+              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
+                <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">TỔNG TNV ĐĂNG KÝ</span>
+                  <div className="text-xl font-black text-gray-900 mt-1">{eventMetrics.totalUsers} <span className="text-xs font-normal text-gray-500">người</span></div>
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider block">LỊCH CHỜ ADMIN DUYỆT</span>
+                  <div className="text-xl font-black text-amber-600 mt-1">{eventMetrics.pendingCheckins} <span className="text-xs font-normal text-gray-500">lịch</span></div>
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider block">LỊCH ĐÃ DUYỆT & MAIL</span>
+                  <div className="text-xl font-black text-emerald-600 mt-1">{eventMetrics.approvedCheckins} <span className="text-xs font-normal text-gray-500">lịch</span></div>
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-blue-200 shadow-2xs">
+                  <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider block">TỔNG CHI PHÍ PHỤ CẤP</span>
+                  <div className="text-xl font-black text-blue-600 mt-1">{eventMetrics.totalPayroll.toLocaleString()} <span className="text-[10px] font-normal text-gray-500">VND</span></div>
+                </div>
+
+                <div className="bg-white p-3 rounded-xl border border-orange-200 bg-orange-50/10 shadow-2xs">
+                  <div className="flex items-center justify-between gap-1 mb-0.5">
+                    <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider block">🍱 SUẤT ĂN THEO NGÀY</span>
+                    <input
+                      type="date"
+                      value={selectedMealDate}
+                      onChange={(e) => setSelectedMealDate(e.target.value)}
+                      className="text-[10px] font-bold border border-orange-200 rounded-md px-1 py-0.5 bg-white text-gray-700 outline-none cursor-pointer"
+                    />
+                  </div>
+                  <div className="text-xl font-black text-orange-600 mt-0.5">
+                    {eventMetrics.meals.total} <span className="text-xs font-normal text-gray-500">suất</span>
+                  </div>
+                  <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500 font-bold border-t border-orange-100 pt-0.5">
+                    <span className="text-amber-800">🌞 Trưa: {eventMetrics.meals.lunch}</span>
+                    <span className="text-purple-800">🌙 Tối: {eventMetrics.meals.dinner}</span>
+                  </div>
+                </div>
+              </div>
+            )}
+
             {/* Search & Department Tabs */}
             <div className="bg-white p-4 rounded-2xl border border-gray-200 shadow-sm flex flex-col md:flex-row items-center justify-between gap-4 mb-4">
               <div className="flex flex-wrap items-center gap-2 w-full md:w-auto">
@@ -780,9 +822,15 @@ export default function AdminDashboard() {
 
                             {/* Initial Registration Department */}
                             <td className="px-4 py-3 align-middle text-center">
-                              <span className="px-2.5 py-1 bg-blue-50 text-blue-800 rounded-lg text-xs font-bold border border-blue-200">
-                                {user.department === 'Lễ Tân' ? 'Lễ Tân' : 'Hậu cần'}
-                              </span>
+                              <select
+                                value={user.department || (departmentsList[0] || 'Lễ Tân')}
+                                onChange={(e) => handleRegisteredDepartmentChangeInline(user.id, e.target.value)}
+                                className="px-2 py-1 text-xs border border-blue-300 rounded-lg bg-blue-50/70 font-bold text-blue-900 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                              >
+                                {departmentsList.map(dep => (
+                                  <option key={dep} value={dep}>{dep}</option>
+                                ))}
+                              </select>
                             </td>
 
                             {/* Inline Work Select */}
@@ -800,7 +848,17 @@ export default function AdminDashboard() {
 
                             {/* Rate */}
                             <td className="px-4 py-3 align-middle text-right font-bold text-gray-700">
-                              {user.salaryRate.toLocaleString()}đ
+                              <div className="flex items-center justify-end gap-1">
+                                <input
+                                  type="number"
+                                  step={5000}
+                                  min={0}
+                                  value={user.salaryRate !== undefined ? user.salaryRate : 0}
+                                  onChange={(e) => handleSalaryChangeInline(user.id, Number(e.target.value))}
+                                  className="w-24 px-2 py-1 text-xs text-right border border-emerald-300 rounded-lg bg-emerald-50/40 font-bold text-emerald-800 outline-none focus:ring-1 focus:ring-emerald-500 shadow-2xs"
+                                />
+                                <span className="text-xs font-bold text-emerald-700">đ</span>
+                              </div>
                             </td>
 
                             {/* Approved Shift count badge */}

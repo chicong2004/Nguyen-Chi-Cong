@@ -58,8 +58,8 @@ export function getFormattedShiftList(): string[] {
 
 
 const DEFAULT_DEPARTMENT_RATES: Record<string, number> = {
-  'Lễ Tân': 70000,
-  'Hậu cần': 50000,
+  'Lễ Tân': 0,
+  'Hậu cần': 0,
 };
 
 const MOCK_USER_1_ID = '10000000-0000-4000-8000-000000000001';
@@ -327,7 +327,7 @@ export async function fetchDepartmentsWithDetailsAsync(): Promise<DepartmentItem
         const items: DepartmentItem[] = data.map(d => ({
           id: d.id,
           name: d.name,
-          allowance: Number(d.allowance) || 50000,
+          allowance: d.allowance !== undefined && d.allowance !== null ? Number(d.allowance) : 0,
         }));
         
         const depNames = items.map(i => i.name);
@@ -340,12 +340,12 @@ export async function fetchDepartmentsWithDetailsAsync(): Promise<DepartmentItem
       }
 
       const initialDeps = [
-        { name: 'Lễ Tân', allowance: 70000 },
-        { name: 'Hậu cần', allowance: 50000 },
+        { name: 'Lễ Tân', allowance: 0 },
+        { name: 'Hậu cần', allowance: 0 },
       ];
       const { data: seeded } = await supabase.from('departments').upsert(initialDeps, { onConflict: 'name' }).select('*');
       if (seeded && seeded.length > 0) {
-        return seeded.map(d => ({ id: d.id, name: d.name, allowance: Number(d.allowance) || 50000 }));
+        return seeded.map(d => ({ id: d.id, name: d.name, allowance: d.allowance !== undefined && d.allowance !== null ? Number(d.allowance) : 0 }));
       }
     } catch (e) {
       console.warn("Lỗi fetch departments details từ Supabase:", e);
@@ -362,7 +362,7 @@ export async function fetchDepartmentsWithDetailsAsync(): Promise<DepartmentItem
   } catch {}
 
   const rates = getDepartmentRates();
-  return names.map(n => ({ name: n, allowance: rates[n] !== undefined ? Number(rates[n]) : 50000 }));
+  return names.map(n => ({ name: n, allowance: rates[n] !== undefined && rates[n] !== null ? Number(rates[n]) : 0 }));
 }
 
 export async function fetchDepartmentsListAsync(): Promise<string[]> {
@@ -370,7 +370,7 @@ export async function fetchDepartmentsListAsync(): Promise<string[]> {
   return items.map(i => i.name);
 }
 
-export async function addDepartmentAsync(name: string, allowance: number = 50000): Promise<void> {
+export async function addDepartmentAsync(name: string, allowance: number = 0): Promise<void> {
   const depName = name.trim();
   if (!depName) return;
 
@@ -453,10 +453,11 @@ export function getDepartmentRates(): Record<string, number> {
 
 export function getDepartmentRate(deptName: string): number {
   const rates = getDepartmentRates();
-  if (rates[deptName] !== undefined) {
-    return Number(rates[deptName]) || 50000;
+  if (rates[deptName] !== undefined && rates[deptName] !== null) {
+    const val = Number(rates[deptName]);
+    return isNaN(val) ? 0 : val;
   }
-  return 50000;
+  return 0;
 }
 
 export function getOtHourlyRate(): number {
@@ -474,17 +475,17 @@ export function saveOtHourlyRate(rate: number): void {
     localStorage.setItem(OT_HOURLY_RATE_KEY, String(rate));
   } catch {}
   if (isSupabaseActive()) {
-    supabase.from('system_settings').upsert({
+    Promise.resolve(supabase.from('system_settings').upsert({
       key: 'ot_hourly_rate',
       value: rate,
       updated_at: Date.now(),
-    }).catch(err => console.warn("Supabase OT rate sync notice:", err));
+    })).catch(err => console.warn("Supabase OT rate sync notice:", err));
   }
 }
 
 export function calculateShiftPay(shiftName: string, salaryRate: number, otHours: number = 0, otHourlyRate?: number): number {
   const rateToUse = otHourlyRate !== undefined ? otHourlyRate : getOtHourlyRate();
-  const baseRate = Number(salaryRate) || 50000;
+  const baseRate = typeof salaryRate === 'number' && !isNaN(salaryRate) ? salaryRate : (Number(salaryRate) || 0);
   const isFullDay = (shiftName || '').includes('Cả Ngày') || (shiftName || '').toLowerCase().includes('full');
   const multiplier = isFullDay ? 2 : 1;
   const shiftBasePay = baseRate * multiplier;
@@ -708,7 +709,7 @@ export async function safeSupabaseUpsertUser(user: User): Promise<void> {
     department: user.department || 'Hậu cần',
     event_id: user.eventId || null,
     event_name: user.eventName || null,
-    salary_rate: user.salaryRate || 50000,
+    salary_rate: user.salaryRate !== undefined && user.salaryRate !== null ? user.salaryRate : 0,
     notes: finalNotes,
     updated_at: user.updatedAt || Date.now(),
   };
@@ -1083,7 +1084,7 @@ export async function fetchAllUsers(): Promise<User[]> {
             eventName: d.event_name || d.eventName || '',
             notes: rawNotes,
             confirmSetup: parsedConfirmSetup,
-            salaryRate: Number(d.salary_rate || d.salaryRate) || 50000,
+            salaryRate: d.salary_rate !== undefined && d.salary_rate !== null ? Number(d.salary_rate) : (d.salaryRate !== undefined ? Number(d.salaryRate) : 0),
             adjustmentAmount: parsedAdjAmount,
             adjustmentNote: parsedAdjNote,
             password: parsedPassword,
@@ -1732,6 +1733,46 @@ export async function removeUser(userId: string): Promise<void> {
       console.warn("Supabase remove user notice:", e);
     }
   }
+}
+
+export async function addCustomShiftByAdmin(payload: {
+  userId: string;
+  fullName: string;
+  department: string;
+  workDate: string;
+  shiftName: string;
+  otHours?: number;
+  eventId?: string;
+  eventName?: string;
+  adminNote?: string;
+  status?: 'pending' | 'approved' | 'rejected';
+}): Promise<Checkin> {
+  const newShift: Checkin = {
+    id: generateUUID(),
+    userId: payload.userId,
+    fullName: payload.fullName,
+    department: payload.department,
+    eventId: payload.eventId,
+    eventName: payload.eventName,
+    workDate: payload.workDate,
+    shiftName: payload.shiftName,
+    otHours: payload.otHours || 0,
+    status: payload.status || 'approved',
+    type: 'checkin',
+    adminNote: payload.adminNote || '',
+    emailNotifySent: payload.status === 'approved',
+    createdAt: Date.now(),
+    updatedAt: Date.now(),
+  };
+
+  const existingCheckins = getLocalCheckins();
+  existingCheckins.unshift(newShift);
+  saveLocalCheckins(existingCheckins);
+
+  await safeSupabaseUpsertCheckin(newShift);
+  await triggerCloudSync();
+
+  return newShift;
 }
 
 export { getLocalSession, setLocalSession };

@@ -15,7 +15,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
   const [phone, setPhone] = useState('');
   const [department, setDepartment] = useState('Hậu cần');
   const [depsList, setDepsList] = useState<string[]>(getDepartmentsList());
-  const [salaryRate, setSalaryRate] = useState<number>(50000);
+  const [salaryRate, setSalaryRate] = useState<number>(0);
   const [adjustmentAmount, setAdjustmentAmount] = useState<number>(0);
   const [adjustmentNote, setAdjustmentNote] = useState('');
   const [facebookLink, setFacebookLink] = useState('');
@@ -32,7 +32,7 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
       setEmail(user.email || '');
       setPhone(user.phone || '');
       setDepartment(user.department || 'Hậu cần');
-      setSalaryRate(user.salaryRate || 50000);
+      setSalaryRate(user.salaryRate !== undefined ? user.salaryRate : 0);
       setAdjustmentAmount(user.adjustmentAmount || 0);
       setAdjustmentNote(user.adjustmentNote || '');
       setFacebookLink(user.facebookLink || '');
