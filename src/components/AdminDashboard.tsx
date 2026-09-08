@@ -225,35 +225,13 @@ export default function AdminDashboard() {
     const adjustments = eventUsers.reduce((sum, u) => sum + (u.adjustmentAmount || 0), 0);
     const totalPayroll = approvedShiftsPay + adjustments;
 
-    const targetDate = selectedMealDate || format(new Date(), 'yyyy-MM-dd');
-    const dateCheckins = eventCheckins.filter(c => {
-      const cDate = c.workDate || format(c.createdAt, 'yyyy-MM-dd');
-      return cDate === targetDate;
-    });
-
-    let lunch = 0;
-    let dinner = 0;
-    const userCheckinsMap = new Map<string, Checkin[]>();
-    dateCheckins.forEach(c => {
-      const uKey = c.userId || c.fullName;
-      if (!userCheckinsMap.has(uKey)) userCheckinsMap.set(uKey, []);
-      userCheckinsMap.get(uKey)!.push(c);
-    });
-
-    userCheckinsMap.forEach(userShifts => {
-      const hasEveningOT = userShifts.some(s => Number(s.otHours) > 0 || (s.shiftName || '').includes('Tối') || (s.shiftName || '').toLowerCase().includes('ot'));
-      lunch += 1;
-      if (hasEveningOT) dinner += 1;
-    });
-
     return {
       totalUsers: eventUsers.length,
       pendingCheckins: pendingCheckins.length,
       approvedCheckins: approvedCheckins.length,
       totalPayroll,
-      meals: { lunch, dinner, total: lunch + dinner },
     };
-  }, [selectedEventFilter, eventsList, users, checkins, selectedMealDate]);
+  }, [selectedEventFilter, eventsList, users, checkins]);
 
   const handleApproveSingle = async (checkin: Checkin) => {
     try {
@@ -667,44 +645,25 @@ export default function AdminDashboard() {
 
             {/* Event-Specific Compact Metric Cards */}
             {eventMetrics && (
-              <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2.5 mb-4">
-                <div className="bg-white p-3 rounded-xl border border-gray-200 shadow-2xs">
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
+                <div className="bg-white p-3.5 rounded-xl border border-gray-200 shadow-2xs">
                   <span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider block">TỔNG TNV ĐĂNG KÝ</span>
                   <div className="text-xl font-black text-gray-900 mt-1">{eventMetrics.totalUsers} <span className="text-xs font-normal text-gray-500">người</span></div>
                 </div>
 
-                <div className="bg-white p-3 rounded-xl border border-amber-200 shadow-2xs">
+                <div className="bg-white p-3.5 rounded-xl border border-amber-200 shadow-2xs">
                   <span className="text-[10px] font-bold text-amber-500 uppercase tracking-wider block">LỊCH CHỜ ADMIN DUYỆT</span>
                   <div className="text-xl font-black text-amber-600 mt-1">{eventMetrics.pendingCheckins} <span className="text-xs font-normal text-gray-500">lịch</span></div>
                 </div>
 
-                <div className="bg-white p-3 rounded-xl border border-emerald-200 shadow-2xs">
+                <div className="bg-white p-3.5 rounded-xl border border-emerald-200 shadow-2xs">
                   <span className="text-[10px] font-bold text-emerald-500 uppercase tracking-wider block">LỊCH ĐÃ DUYỆT & MAIL</span>
                   <div className="text-xl font-black text-emerald-600 mt-1">{eventMetrics.approvedCheckins} <span className="text-xs font-normal text-gray-500">lịch</span></div>
                 </div>
 
-                <div className="bg-white p-3 rounded-xl border border-blue-200 shadow-2xs">
+                <div className="bg-white p-3.5 rounded-xl border border-blue-200 shadow-2xs">
                   <span className="text-[10px] font-bold text-blue-500 uppercase tracking-wider block">TỔNG CHI PHÍ PHỤ CẤP</span>
                   <div className="text-xl font-black text-blue-600 mt-1">{eventMetrics.totalPayroll.toLocaleString()} <span className="text-[10px] font-normal text-gray-500">VND</span></div>
-                </div>
-
-                <div className="bg-white p-3 rounded-xl border border-orange-200 bg-orange-50/10 shadow-2xs">
-                  <div className="flex items-center justify-between gap-1 mb-0.5">
-                    <span className="text-[10px] font-bold text-orange-600 uppercase tracking-wider block">🍱 SUẤT ĂN THEO NGÀY</span>
-                    <input
-                      type="date"
-                      value={selectedMealDate}
-                      onChange={(e) => setSelectedMealDate(e.target.value)}
-                      className="text-[10px] font-bold border border-orange-200 rounded-md px-1 py-0.5 bg-white text-gray-700 outline-none cursor-pointer"
-                    />
-                  </div>
-                  <div className="text-xl font-black text-orange-600 mt-0.5">
-                    {eventMetrics.meals.total} <span className="text-xs font-normal text-gray-500">suất</span>
-                  </div>
-                  <div className="mt-1 flex items-center justify-between text-[10px] text-gray-500 font-bold border-t border-orange-100 pt-0.5">
-                    <span className="text-amber-800">🌞 Trưa: {eventMetrics.meals.lunch}</span>
-                    <span className="text-purple-800">🌙 Tối: {eventMetrics.meals.dinner}</span>
-                  </div>
                 </div>
               </div>
             )}
@@ -823,13 +782,12 @@ export default function AdminDashboard() {
                             {/* Initial Registration Department */}
                             <td className="px-4 py-3 align-middle text-center">
                               <select
-                                value={user.department || (departmentsList[0] || 'Lễ Tân')}
+                                value={user.department === 'Lễ Tân' ? 'Lễ Tân' : 'Hậu cần'}
                                 onChange={(e) => handleRegisteredDepartmentChangeInline(user.id, e.target.value)}
-                                className="px-2 py-1 text-xs border border-blue-300 rounded-lg bg-blue-50/70 font-bold text-blue-900 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
+                                className="px-2.5 py-1 text-xs border border-blue-300 rounded-lg bg-blue-50/80 font-bold text-blue-900 outline-none focus:ring-1 focus:ring-blue-500 cursor-pointer shadow-2xs"
                               >
-                                {departmentsList.map(dep => (
-                                  <option key={dep} value={dep}>{dep}</option>
-                                ))}
+                                <option value="Lễ Tân">Lễ Tân</option>
+                                <option value="Hậu cần">Hậu cần</option>
                               </select>
                             </td>
 

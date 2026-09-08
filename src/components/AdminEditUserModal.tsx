@@ -128,15 +128,14 @@ export default function AdminEditUserModal({ user, isOpen, onClose, onSaved }: A
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div>
-              <label className="block text-xs font-bold text-gray-700 mb-1">Công việc công tác</label>
+              <label className="block text-xs font-bold text-gray-700 mb-1">Bộ phận đăng ký</label>
               <select
-                value={department}
+                value={department === 'Lễ Tân' ? 'Lễ Tân' : 'Hậu cần'}
                 onChange={(e) => setDepartment(e.target.value)}
                 className="w-full px-3 py-2 border border-gray-300 rounded-xl text-sm outline-none focus:ring-2 focus:ring-blue-500 bg-white font-bold"
               >
-                {depsList.map(dep => (
-                  <option key={dep} value={dep}>{dep}</option>
-                ))}
+                <option value="Lễ Tân">Lễ Tân</option>
+                <option value="Hậu cần">Hậu cần</option>
               </select>
             </div>
 
