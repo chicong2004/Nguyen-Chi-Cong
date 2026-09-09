@@ -29,6 +29,7 @@ import AdminDepartmentModal from './AdminDepartmentModal';
 import AdminSettingsModal from './AdminSettingsModal';
 import AdminEventModal from './AdminEventModal';
 import AdminUserDetailModal from './AdminUserDetailModal';
+import ShiftOverviewSheet from './ShiftOverviewSheet';
 import { getEventsList, fetchEventsListAsync } from '../services/dataService';
 
 export default function AdminDashboard() {
@@ -47,6 +48,7 @@ export default function AdminDashboard() {
   const [isDeptModalOpen, setIsDeptModalOpen] = useState(false);
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
+  const [isShiftOverviewOpen, setIsShiftOverviewOpen] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
 
   // Search & Filter
@@ -394,6 +396,13 @@ export default function AdminDashboard() {
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900 pb-16">
       {/* Modals */}
+      {isShiftOverviewOpen && (
+        <ShiftOverviewSheet
+          users={users}
+          checkins={checkins}
+          onClose={() => setIsShiftOverviewOpen(false)}
+        />
+      )}
       <AdminDailyQRModal isOpen={isDailyQROpen} onClose={() => setIsDailyQROpen(false)} />
       <AdminDepartmentModal 
         isOpen={isDeptModalOpen} 
@@ -438,6 +447,13 @@ export default function AdminDashboard() {
           </div>
 
           <div className="flex flex-wrap gap-2">
+            <button
+              onClick={() => setIsShiftOverviewOpen(true)}
+              className="px-3.5 py-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
+            >
+              📊 Tổng Hợp Ca Làm Việc
+            </button>
+
             <button
               onClick={() => setIsEventModalOpen(true)}
               className="px-3.5 py-2 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1"
