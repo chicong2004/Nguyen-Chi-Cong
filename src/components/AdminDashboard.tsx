@@ -162,15 +162,13 @@ export default function AdminDashboard() {
         const hasMatchingCheckin = checkins.some(c => 
           (c.userId === u.id || (c.fullName && c.fullName.trim().toLowerCase() === u.fullName.trim().toLowerCase())) && (
             c.eventId === selectedEventFilter || 
-            (targetEvtName && c.eventName === targetEvtName) ||
-            (!c.eventId && !c.eventName)
+            (targetEvtName && c.eventName === targetEvtName)
           )
         );
         const hasMatchingUserEvent = u.eventId === selectedEventFilter || 
-          (targetEvtName && u.eventName === targetEvtName) ||
-          !u.eventId || !u.eventName;
+          (targetEvtName && u.eventName === targetEvtName);
 
-        matchesEvent = hasMatchingCheckin || hasMatchingUserEvent;
+        matchesEvent = Boolean(hasMatchingCheckin || hasMatchingUserEvent);
       }
 
       return matchesTab && matchesSearch && matchesEvent;
@@ -420,6 +418,8 @@ export default function AdminDashboard() {
       <AdminUserDetailModal
         user={selectedDetailUser}
         checkins={checkins}
+        selectedEventId={selectedEventFilter}
+        selectedEventName={eventsList.find(e => e.id === selectedEventFilter)?.name}
         isOpen={Boolean(selectedDetailUser)}
         onClose={() => setSelectedDetailUser(null)}
         onDataChanged={loadAllData}
@@ -795,10 +795,17 @@ export default function AdminDashboard() {
                     </thead>
                     <tbody className="divide-y divide-gray-100">
                       {filteredUsers.map(user => {
-                        const userCheckins = checkins.filter(c => 
-                          c.userId === user.id || 
-                          (c.fullName && user.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())
-                        ).sort((a, b) => b.createdAt - a.createdAt);
+                        const userCheckins = checkins.filter(c => {
+                          const isUser = c.userId === user.id || 
+                            (c.fullName && user.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase());
+                          if (!isUser) return false;
+                          if (selectedEventFilter !== 'all') {
+                            const targetEvt = eventsList.find(e => e.id === selectedEventFilter);
+                            const targetEvtName = targetEvt?.name;
+                            return c.eventId === selectedEventFilter || (targetEvtName && c.eventName === targetEvtName);
+                          }
+                          return true;
+                        }).sort((a, b) => b.createdAt - a.createdAt);
                         const approvedCheckins = userCheckins.filter(c => c.status === 'approved');
                         const approvedCount = approvedCheckins.length;
                         const totalOTHours = approvedCheckins.reduce((otSum, c) => otSum + (Number(c.otHours) || 0), 0);

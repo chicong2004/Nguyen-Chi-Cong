@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { User, Checkin, EventItem } from '../types';
 import { 
   updateCheckinShiftDetails, 
@@ -18,24 +18,39 @@ import { format } from 'date-fns';
 interface AdminUserDetailModalProps {
   user: User | null;
   checkins: Checkin[];
+  selectedEventId?: string;
+  selectedEventName?: string;
   isOpen: boolean;
   onClose: () => void;
   onDataChanged: () => void;
 }
 
-export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, onDataChanged }: AdminUserDetailModalProps) {
+export default function AdminUserDetailModal({ 
+  user, 
+  checkins, 
+  selectedEventId, 
+  selectedEventName, 
+  isOpen, 
+  onClose, 
+  onDataChanged 
+}: AdminUserDetailModalProps) {
   const [editingShiftId, setEditingShiftId] = useState<string | null>(null);
   const [isEditingAdjustment, setIsEditingAdjustment] = useState(false);
   const [salaryRateInput, setSalaryRateInput] = useState<number>(user?.salaryRate !== undefined ? user.salaryRate : 0);
   const [adjAmountInput, setAdjAmountInput] = useState<number>(user?.adjustmentAmount || 0);
   const [adjNoteInput, setAdjNoteInput] = useState<string>(user?.adjustmentNote || '');
   
+  // Event Scope Filter inside modal ('current' vs 'all')
+  const [eventScope, setEventScope] = useState<'current' | 'all'>(() => {
+    return selectedEventId && selectedEventId !== 'all' ? 'current' : 'all';
+  });
+
   // Custom Shift Addition State
   const [isAddingCustomShift, setIsAddingCustomShift] = useState(false);
   const [newWorkDate, setNewWorkDate] = useState(format(new Date(), 'yyyy-MM-dd'));
   const [newShiftName, setNewShiftName] = useState('Ca Sáng (07:00 - 12:00)');
   const [newDepartment, setNewDepartment] = useState(user?.department || 'Hậu cần');
-  const [newEventId, setNewEventId] = useState(user?.eventId || '');
+  const [newEventId, setNewEventId] = useState(selectedEventId && selectedEventId !== 'all' ? selectedEventId : (user?.eventId || ''));
   const [newOtHours, setNewOtHours] = useState(0);
   const [newAdminNote, setNewAdminNote] = useState('');
   const [newStatus, setNewStatus] = useState<'approved' | 'pending'>('approved');
@@ -48,17 +63,36 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
   const [editEventId, setEditEventId] = useState('');
   const [editAdminNote, setEditAdminNote] = useState('');
 
-  if (!isOpen || !user) return null;
-
-  const userCheckins = checkins.filter(c => 
-    c.userId === user.id || 
-    (c.fullName && user.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())
-  ).sort((a, b) => b.createdAt - a.createdAt);
-  const approvedCheckins = userCheckins.filter(c => c.status === 'approved');
-  const approvedShiftPay = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName || '', user.salaryRate, c.otHours), 0);
-  const totalSalary = approvedShiftPay + (user.adjustmentAmount || 0);
-  const departments = getDepartmentsList();
   const events = getEventsList();
+  const departments = getDepartmentsList();
+
+  const allUserCheckins = useMemo(() => {
+    if (!user) return [];
+    return checkins.filter(c => 
+      c.userId === user.id || 
+      (c.fullName && user.fullName && c.fullName.trim().toLowerCase() === user.fullName.trim().toLowerCase())
+    ).sort((a, b) => b.createdAt - a.createdAt);
+  }, [checkins, user]);
+
+  const currentEventCheckins = useMemo(() => {
+    if (!selectedEventId || selectedEventId === 'all') return allUserCheckins;
+    const targetEvt = events.find(e => e.id === selectedEventId);
+    const targetName = targetEvt?.name || selectedEventName;
+    return allUserCheckins.filter(c => 
+      c.eventId === selectedEventId || 
+      (targetName && c.eventName === targetName)
+    );
+  }, [allUserCheckins, selectedEventId, selectedEventName, events]);
+
+  const displayedCheckins = eventScope === 'current' && selectedEventId && selectedEventId !== 'all' 
+    ? currentEventCheckins 
+    : allUserCheckins;
+
+  const approvedCheckins = displayedCheckins.filter(c => c.status === 'approved');
+  const approvedShiftPay = approvedCheckins.reduce((sum, c) => sum + calculateShiftPay(c.shiftName || '', user?.salaryRate, c.otHours), 0);
+  const totalSalary = approvedShiftPay + (user?.adjustmentAmount || 0);
+
+  if (!isOpen || !user) return null;
 
   const handleAddCustomShift = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -144,7 +178,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
 
         {/* User Summary Header */}
         <div className="flex items-center gap-4 pb-4 border-b border-gray-100">
-          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-md">
+          <div className="w-14 h-14 rounded-2xl bg-gradient-to-br from-blue-600 to-indigo-600 text-white font-black text-2xl flex items-center justify-center shadow-md shrink-0">
             {user.fullName.charAt(0).toUpperCase()}
           </div>
           <div>
@@ -170,8 +204,35 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
           </div>
         </div>
 
+        {/* Event Scope Filter Tabs */}
+        {selectedEventId && selectedEventId !== 'all' && (
+          <div className="flex items-center gap-2 mt-3 bg-purple-50/70 p-1.5 rounded-2xl border border-purple-200">
+            <span className="text-xs font-bold text-purple-900 pl-2">Xem ca theo:</span>
+            <button
+              onClick={() => setEventScope('current')}
+              className={`px-3 py-1 text-xs font-extrabold rounded-xl transition ${
+                eventScope === 'current'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'bg-white text-purple-900 hover:bg-purple-100'
+              }`}
+            >
+              🎪 Sự Kiện Này ({currentEventCheckins.length} ca)
+            </button>
+            <button
+              onClick={() => setEventScope('all')}
+              className={`px-3 py-1 text-xs font-extrabold rounded-xl transition ${
+                eventScope === 'all'
+                  ? 'bg-purple-600 text-white shadow-xs'
+                  : 'bg-white text-purple-900 hover:bg-purple-100'
+              }`}
+            >
+              🌐 Toàn Bộ Lịch Sử ({allUserCheckins.length} ca)
+            </button>
+          </div>
+        )}
+
         {/* Financial Stat Banner */}
-        <div className="my-4 bg-gradient-to-r from-blue-50/80 via-purple-50/50 to-emerald-50/80 p-3.5 rounded-2xl border border-blue-200">
+        <div className="my-3 bg-gradient-to-r from-blue-50/80 via-purple-50/50 to-emerald-50/80 p-3.5 rounded-2xl border border-blue-200">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-center">
             <div>
               <span className="text-[11px] text-gray-500 font-medium block">Số ca đã duyệt</span>
@@ -266,8 +327,13 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
         {/* List of Registered Shifts */}
         <div className="flex-1 overflow-y-auto pr-1 space-y-3">
           <div className="flex items-center justify-between">
-            <h4 className="font-bold text-xs text-gray-700 uppercase tracking-wider">
-              📅 Danh sách ca đăng ký ({userCheckins.length})
+            <h4 className="font-bold text-xs text-gray-700 uppercase tracking-wider flex items-center gap-1.5">
+              <span>📅 Danh sách ca làm ({displayedCheckins.length} ca)</span>
+              {eventScope === 'current' && selectedEventName && (
+                <span className="text-[10px] text-purple-700 font-bold bg-purple-100 px-2 py-0.5 rounded-full">
+                  {selectedEventName}
+                </span>
+              )}
             </h4>
             <button
               onClick={() => setIsAddingCustomShift(!isAddingCustomShift)}
@@ -394,12 +460,12 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
             </form>
           )}
 
-          {userCheckins.length === 0 ? (
-            <div className="text-center py-8 text-xs text-gray-400 italic">
-              Chưa có lịch ca làm việc nào.
+          {displayedCheckins.length === 0 ? (
+            <div className="text-center py-8 text-xs text-gray-400 italic bg-gray-50 rounded-2xl border border-gray-100">
+              Chưa có lịch ca làm việc nào thuộc sự kiện này.
             </div>
           ) : (
-            userCheckins.map(shift => {
+            displayedCheckins.map(shift => {
               const isEditing = editingShiftId === shift.id;
               const shiftPay = calculateShiftPay(shift.shiftName || '', user.salaryRate, shift.otHours);
 
@@ -408,10 +474,10 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                   {!isEditing ? (
                     <>
                       <div className="flex items-center justify-between font-bold text-xs text-gray-900">
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-2 flex-wrap">
                           <span className="text-sm">📅 {shift.workDate || format(shift.createdAt, 'dd/MM/yyyy')}: {shift.shiftName}</span>
                           {shift.eventName && (
-                            <span className="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded-full">
+                            <span className="bg-purple-100 text-purple-800 text-[10px] px-2 py-0.5 rounded-full font-bold">
                               🎉 {shift.eventName}
                             </span>
                           )}
@@ -469,41 +535,41 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                           {shift.status !== 'approved' && (
                             <button
                               onClick={() => handleApprove(shift.id)}
-                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl"
+                              className="px-2.5 py-1 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-lg transition shadow-2xs"
                             >
-                              ✓ Duyệt
+                              ✓ Duyệt Ca
                             </button>
                           )}
                           {shift.status !== 'rejected' && (
                             <button
                               onClick={() => handleReject(shift.id)}
-                              className="px-2.5 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-xl"
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-800 font-bold rounded-lg transition border border-amber-200"
                             >
                               ✕ Từ Chối
                             </button>
                           )}
                           <button
                             onClick={() => handleStartEditShift(shift)}
-                            className="px-2.5 py-1 bg-blue-50 text-blue-700 hover:bg-blue-100 font-bold rounded-xl"
+                            className="px-2.5 py-1 bg-blue-50 hover:bg-blue-100 text-blue-700 font-bold rounded-lg transition border border-blue-200"
                           >
-                            ✏️ Sửa chi tiết ca
+                            ✏️ Sửa Ca
                           </button>
                         </div>
 
                         <button
                           onClick={() => handleDelete(shift)}
-                          className="px-2 py-1 text-red-600 hover:bg-red-50 font-bold rounded-xl"
+                          className="px-2 py-1 text-red-500 hover:text-red-700 hover:bg-red-50 rounded-lg transition text-xs font-semibold"
                         >
-                          🗑️ Xóa ca
+                          🗑️ Xóa
                         </button>
                       </div>
                     </>
                   ) : (
-                    /* Shift Inline Edit Form */
-                    <div className="bg-blue-50/60 p-3 rounded-xl border border-blue-200 space-y-3">
-                      <div className="font-bold text-xs text-blue-900 flex items-center justify-between">
-                        <span>✏️ Chỉnh Sửa Chi Tiết Ca Làm</span>
-                        <button onClick={() => setEditingShiftId(null)} className="text-gray-400 hover:text-gray-700">✕ Hủy</button>
+                    /* Inline Edit Shift Form */
+                    <div className="space-y-3 bg-blue-50/60 p-3.5 rounded-xl border border-blue-200">
+                      <div className="font-bold text-xs text-blue-900 flex justify-between">
+                        <span>✏️ Chỉnh Sửa Thông Tin Ca Làm</span>
+                        <button onClick={() => setEditingShiftId(null)} className="text-gray-400 hover:text-gray-700">✕</button>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
@@ -513,32 +579,28 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                             type="date"
                             value={editWorkDate}
                             onChange={(e) => setEditWorkDate(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-blue-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
 
                         <div>
                           <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Ca làm việc</label>
-                          <select
+                          <input
+                            type="text"
                             value={editShiftName}
                             onChange={(e) => setEditShiftName(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
-                          >
-                            <option value="Ca Sáng (07:00 - 12:00)">Ca Sáng (07:00 - 12:00)</option>
-                            <option value="Ca Chiều (13:00 - 17:30)">Ca Chiều (13:00 - 17:30)</option>
-                            <option value="Ca Tối / OT (18:00 - 22:00)">Ca Tối / OT (18:00 - 22:00)</option>
-                            <option value="Ca Cả Ngày (07:00 - 17:30)">Ca Cả Ngày (07:00 - 17:30)</option>
-                          </select>
+                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-blue-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                          />
                         </div>
                       </div>
 
                       <div className="grid grid-cols-2 gap-2">
                         <div>
-                          <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Công việc ca này</label>
+                          <label className="block text-[10px] font-bold text-gray-700 mb-0.5">Bộ phận</label>
                           <select
                             value={editDepartment}
                             onChange={(e) => setEditDepartment(e.target.value)}
-                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-blue-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
                           >
                             {departments.map(d => (
                               <option key={d} value={d}>{d}</option>
@@ -554,7 +616,7 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                             max={12}
                             value={editOtHours}
                             onChange={(e) => setEditOtHours(Number(e.target.value))}
-                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                            className="w-full px-2.5 py-1.5 text-xs font-bold border border-blue-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
                           />
                         </div>
                       </div>
@@ -564,9 +626,9 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                         <select
                           value={editEventId}
                           onChange={(e) => setEditEventId(e.target.value)}
-                          className="w-full px-2.5 py-1.5 text-xs font-bold border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                          className="w-full px-2.5 py-1.5 text-xs font-bold border border-blue-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
                         >
-                          <option value="">-- Chọn sự kiện --</option>
+                          <option value="">-- Chưa gán sự kiện --</option>
                           {events.map(evt => (
                             <option key={evt.id} value={evt.id}>{evt.name}</option>
                           ))}
@@ -579,23 +641,23 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
                           type="text"
                           value={editAdminNote}
                           onChange={(e) => setEditAdminNote(e.target.value)}
-                          placeholder="Nhập ghi chú cho ca làm này..."
-                          className="w-full px-2.5 py-1.5 text-xs border border-gray-300 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
+                          placeholder="Ghi chú cho ca này..."
+                          className="w-full px-2.5 py-1.5 text-xs border border-blue-200 rounded-lg bg-white outline-none focus:ring-2 focus:ring-blue-500"
                         />
                       </div>
 
                       <div className="flex justify-end gap-2 pt-1">
                         <button
                           onClick={() => setEditingShiftId(null)}
-                          className="px-3 py-1 bg-gray-200 text-gray-700 font-bold text-xs rounded-lg"
+                          className="px-3 py-1 bg-gray-200 text-gray-700 text-xs font-bold rounded-lg"
                         >
                           Hủy
                         </button>
                         <button
                           onClick={() => handleSaveShiftEdit(shift.id)}
-                          className="px-4 py-1 bg-blue-600 text-white font-bold text-xs rounded-lg shadow hover:bg-blue-700"
+                          className="px-4 py-1 bg-blue-600 text-white text-xs font-bold rounded-lg hover:bg-blue-700 shadow-xs"
                         >
-                          💾 Lưu thay đổi ca
+                          💾 Lưu Ca Làm
                         </button>
                       </div>
                     </div>
@@ -606,11 +668,14 @@ export default function AdminUserDetailModal({ user, checkins, isOpen, onClose, 
           )}
         </div>
 
-        {/* Footer */}
-        <div className="mt-4 pt-3 border-t border-gray-100 flex justify-end">
+        {/* Modal Footer */}
+        <div className="mt-4 pt-3 border-t border-gray-100 flex items-center justify-between text-xs text-gray-500">
+          <div>
+            Đang hiển thị: <strong className="text-gray-800">{displayedCheckins.length}</strong> ca làm việc ({approvedCheckins.length} ca đã duyệt)
+          </div>
           <button
             onClick={onClose}
-            className="px-5 py-2 bg-gray-900 text-white rounded-xl font-bold text-xs hover:bg-black transition"
+            className="px-5 py-2 bg-gray-900 text-white rounded-xl font-bold hover:bg-black transition"
           >
             Đóng
           </button>
