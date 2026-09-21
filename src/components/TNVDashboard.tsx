@@ -60,7 +60,10 @@ export default function TNVDashboard() {
       // 0. Check if user's event is locked by Admin
       const eventStatus = await checkUserEventStatus(activeProfile);
       if (eventStatus.isArchived) {
-        alert(`Sự kiện "${eventStatus.eventName || 'đã chọn'}" hiện đang bị Admin khóa. Tài khoản tự động đăng xuất.`);
+        const activeNames = eventStatus.activeEvents && eventStatus.activeEvents.length > 0
+          ? eventStatus.activeEvents.map(e => `"${e.name}"`).join(', ')
+          : 'sự kiện mới';
+        alert(`🔒 Sự kiện "${eventStatus.eventName || 'đã chọn'}" hiện đã bị Admin KHÓA.\n👉 Bạn vui lòng đăng ký tài khoản mới cho sự kiện: ${activeNames} để tiếp tục làm việc!`);
         await logout();
         return;
       }

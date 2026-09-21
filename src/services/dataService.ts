@@ -1,7 +1,12 @@
 import { supabase, supabaseUrl, supabaseAnonKey } from '../supabase';
 import { User, Checkin, EventItem, ShiftConfig } from '../types';
 import { format } from 'date-fns';
-import { sendApprovalEmailNotification, getAdminEmailSettings } from './emailService';
+import { 
+  sendApprovalEmailNotification, 
+  sendCheckinEmailNotification, 
+  sendCheckoutEmailNotification, 
+  getAdminEmailSettings 
+} from './emailService';
 import { pushGlobalCloudData, pullGlobalCloudData } from './cloudSyncService';
 
 const LOCAL_USERS_KEY = 'app_users_data_v1';
@@ -843,11 +848,13 @@ export async function registerTNV(payload: {
   return newUser;
 }
 
-export async function checkUserEventStatus(user: User): Promise<{ isArchived: boolean; eventName?: string }> {
+export async function checkUserEventStatus(user: User): Promise<{ isArchived: boolean; eventName?: string; activeEvents?: EventItem[] }> {
   if (!user || user.role === 'admin') return { isArchived: false };
 
   const events = await fetchEventsListAsync();
   if (!events || events.length === 0) return { isArchived: false };
+
+  const activeEvents = events.filter(e => e.status === 'active');
 
   let userEvent = events.find(e => user.eventId && e.id === user.eventId);
 
@@ -872,10 +879,10 @@ export async function checkUserEventStatus(user: User): Promise<{ isArchived: bo
   }
 
   if (userEvent && userEvent.status === 'archived') {
-    return { isArchived: true, eventName: userEvent.name };
+    return { isArchived: true, eventName: userEvent.name, activeEvents };
   }
 
-  return { isArchived: false };
+  return { isArchived: false, activeEvents };
 }
 
 export async function loginTNV(email: string, password?: string): Promise<User> {
@@ -896,7 +903,10 @@ export async function loginTNV(email: string, password?: string): Promise<User> 
   // Check if TNV user's event is locked/archived
   const eventStatus = await checkUserEventStatus(user);
   if (eventStatus.isArchived) {
-    throw new Error(`Sự kiện "${eventStatus.eventName || 'đã đăng ký'}" hiện đang bị Admin khóa. Tài khoản thuộc sự kiện này không thể đăng nhập trừ khi Admin mở lại sự kiện.`);
+    const activeNames = eventStatus.activeEvents && eventStatus.activeEvents.length > 0
+      ? eventStatus.activeEvents.map(e => `"${e.name}"`).join(', ')
+      : 'sự kiện mới';
+    throw new Error(`🔒 Tài khoản của bạn thuộc sự kiện "${eventStatus.eventName || 'đã chọn'}" hiện đã bị Admin KHÓA (sự kiện đã kết thúc).\n\n👉 Bạn không thể đăng nhập tài khoản này nữa. Vui lòng chuyển sang tab "Đăng Ký TNV / CTV Mới" để tạo tài khoản tham gia sự kiện: ${activeNames}!`);
   }
 
   if (cleanPass && !user.password) {
@@ -932,7 +942,10 @@ export async function resetPasswordWithEmailAndPhone(email: string, phone: strin
 
   const eventStatus = await checkUserEventStatus(user);
   if (eventStatus.isArchived) {
-    throw new Error(`Sự kiện "${eventStatus.eventName || 'đã đăng ký'}" hiện đang bị Admin khóa. Không thể đổi mật khẩu tài khoản thuộc sự kiện bị khóa.`);
+    const activeNames = eventStatus.activeEvents && eventStatus.activeEvents.length > 0
+      ? eventStatus.activeEvents.map(e => `"${e.name}"`).join(', ')
+      : 'sự kiện mới';
+    throw new Error(`🔒 Tài khoản của bạn thuộc sự kiện "${eventStatus.eventName || 'đã chọn'}" hiện đã bị Admin KHÓA. Vui lòng đăng ký tài khoản mới cho sự kiện: ${activeNames}!`);
   }
 
   user.password = cleanNewPass;
@@ -1394,9 +1407,24 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
         await safeSupabaseUpsertCheckin(openShift);
         await approveCheckinItem(openShift.id);
 
+        // Auto-send Checkout confirmation email to TNV
+        if (activeUser.email) {
+          sendCheckoutEmailNotification({
+            toEmail: activeUser.email,
+            toName: activeUser.fullName,
+            checkoutTime: openShift.checkoutTime || now,
+            checkinTime: openShift.checkinTime,
+            workDate: workDate,
+            eventName: openShift.eventName || activeUser.eventName,
+            shiftName: openShift.shiftName,
+            department: openShift.department || activeUser.department,
+            salaryRate: activeUser.salaryRate,
+          }).catch(err => console.error("Lỗi gửi mail auto checkout:", err));
+        }
+
         return {
           success: true,
-          message: `🏁 CHECK-OUT THÀNH CÔNG! Đã ghi nhận giờ ra lúc ${format(openShift.checkoutTime, 'HH:mm')}. Ca làm ngày ${workDate} (${openShift.shiftName}) đã được tự động duyệt & tính công!`,
+          message: `🏁 CHECK-OUT THÀNH CÔNG! Đã ghi nhận giờ ra lúc ${format(openShift.checkoutTime, 'HH:mm')}. Ca làm ngày ${workDate} (${openShift.shiftName}) đã được tự động duyệt & tính công! 📧 Mail xác nhận đã được gửi đến ${activeUser.email || 'bạn'}.`,
           checkin: openShift,
         };
       } else {
@@ -1456,9 +1484,22 @@ export async function processQRCheckin(qrToken: string, activeUser?: User): Prom
       await safeSupabaseUpsertCheckin(checkin);
       await triggerCloudSync();
 
+      // Auto-send Checkin confirmation email to TNV
+      if (activeUser.email) {
+        sendCheckinEmailNotification({
+          toEmail: activeUser.email,
+          toName: activeUser.fullName,
+          checkinTime: checkin.checkinTime || now,
+          workDate: workDate,
+          eventName: checkin.eventName || activeUser.eventName,
+          shiftName: checkin.shiftName,
+          department: checkin.department || activeUser.department,
+        }).catch(err => console.error("Lỗi gửi mail auto checkin:", err));
+      }
+
       return {
         success: true,
-        message: `📍 CHECK-IN THÀNH CÔNG! Đã ghi nhận giờ vào lúc ${format(checkin.checkinTime, 'HH:mm')} ngày ${workDate}. Hãy nhớ quét CHECK-OUT khi ra về để được tự động duyệt & tính công!`,
+        message: `📍 CHECK-IN THÀNH CÔNG! Đã ghi nhận giờ vào lúc ${format(checkin.checkinTime, 'HH:mm')} ngày ${workDate}. Hãy nhớ quét CHECK-OUT khi ra về để được tự động duyệt & tính công! 📧 Mail xác nhận đã được gửi đến ${activeUser.email || 'bạn'}.`,
         checkin,
       };
     }

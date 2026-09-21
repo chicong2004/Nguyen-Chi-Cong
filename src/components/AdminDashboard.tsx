@@ -49,6 +49,7 @@ export default function AdminDashboard() {
   const [isEventModalOpen, setIsEventModalOpen] = useState(false);
   const [isSettingsOpen, setIsSettingsOpen] = useState(false);
   const [isShiftOverviewOpen, setIsShiftOverviewOpen] = useState(false);
+  const [overviewEvent, setOverviewEvent] = useState<any>(null);
   const [toastMessage, setToastMessage] = useState('');
 
   // Search & Filter
@@ -400,6 +401,8 @@ export default function AdminDashboard() {
         <ShiftOverviewSheet
           users={users}
           checkins={checkins}
+          event={overviewEvent}
+          eventsList={eventsList}
           onClose={() => setIsShiftOverviewOpen(false)}
         />
       )}
@@ -448,7 +451,11 @@ export default function AdminDashboard() {
 
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={() => setIsShiftOverviewOpen(true)}
+              onClick={() => {
+                const curEvt = selectedEventFilter !== 'all' ? eventsList.find(e => e.id === selectedEventFilter) || null : null;
+                setOverviewEvent(curEvt);
+                setIsShiftOverviewOpen(true);
+              }}
               className="px-3.5 py-2 bg-gradient-to-r from-indigo-500 to-violet-600 hover:opacity-95 text-white text-xs font-bold rounded-xl shadow-sm transition flex items-center gap-1.5"
             >
               📊 Tổng Hợp Ca Làm Việc
@@ -610,15 +617,28 @@ export default function AdminDashboard() {
                           </div>
                         </div>
 
-                        <button
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            setSelectedEventFilter(evt.id);
-                          }}
-                          className="w-full py-2.5 bg-purple-600 group-hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold transition shadow-xs flex items-center justify-center gap-1"
-                        >
-                          <span>👉</span> Xem Data User Sự Kiện Này ({evtUsers.length} người)
-                        </button>
+                        <div className="grid grid-cols-2 gap-2">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setOverviewEvent(evt);
+                              setIsShiftOverviewOpen(true);
+                            }}
+                            className="py-2.5 bg-gradient-to-r from-indigo-600 to-violet-600 hover:opacity-95 text-white rounded-xl text-xs font-black transition shadow-xs flex items-center justify-center gap-1"
+                          >
+                            <span>📊</span> Tổng Hợp Ca
+                          </button>
+
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedEventFilter(evt.id);
+                            }}
+                            className="py-2.5 bg-purple-600 group-hover:bg-purple-700 text-white rounded-xl text-xs font-extrabold transition shadow-xs flex items-center justify-center gap-1"
+                          >
+                            <span>👉</span> Xem User ({evtUsers.length})
+                          </button>
+                        </div>
                       </div>
                     </div>
                   );
@@ -649,10 +669,21 @@ export default function AdminDashboard() {
                 </div>
               </div>
 
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 flex-wrap">
+                <button
+                  onClick={() => {
+                    const currentEvt = eventsList.find(e => e.id === selectedEventFilter) || null;
+                    setOverviewEvent(currentEvt);
+                    setIsShiftOverviewOpen(true);
+                  }}
+                  className="px-3.5 py-2 bg-gradient-to-r from-indigo-600 to-purple-600 hover:opacity-95 text-white rounded-xl text-xs font-black transition flex items-center gap-1.5 shadow-xs"
+                >
+                  <span>📊</span> Bảng Tổng Hợp Ca Sự Kiện
+                </button>
+
                 <button
                   onClick={() => setIsEventModalOpen(true)}
-                  className="px-3 py-1.5 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition flex items-center gap-1"
+                  className="px-3 py-2 bg-gray-100 hover:bg-gray-200 text-gray-800 rounded-xl text-xs font-bold transition flex items-center gap-1"
                 >
                   <span>⚙️</span> Quản Lý Sự Kiện
                 </button>

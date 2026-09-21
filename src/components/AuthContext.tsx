@@ -73,7 +73,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
             setLocalSession(null);
             setCurrentUser(null);
             setLoading(false);
-            alert(`Sự kiện "${eventStatus.eventName || 'đã đăng ký'}" hiện đang bị Admin khóa. Tài khoản đã tự động đăng xuất.`);
+            const activeNames = eventStatus.activeEvents && eventStatus.activeEvents.length > 0
+              ? eventStatus.activeEvents.map(e => `"${e.name}"`).join(', ')
+              : 'sự kiện mới';
+            alert(`🔒 Sự kiện "${eventStatus.eventName || 'đã chọn'}" đã bị Admin khóa.\n👉 Tài khoản của bạn không thể tiếp tục truy cập. Vui lòng đăng ký tài khoản mới cho sự kiện: ${activeNames}!`);
             return;
           }
         }

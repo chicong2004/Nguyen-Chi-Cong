@@ -187,8 +187,24 @@ export default function TNVLogin({ initialIsLogin = false }: TNVLoginProps) {
         </p>
       </div>
 
-      {error && <div className="p-3 mb-4 text-xs text-red-600 bg-red-50 border border-red-100 rounded-xl">{error}</div>}
-      {success && <div className="p-3 mb-4 text-xs text-green-600 bg-green-50 border border-green-100 rounded-xl">{success}</div>}
+      {error && (
+        <div className="p-3.5 mb-4 text-xs text-red-700 bg-red-50 border border-red-200 rounded-xl space-y-2">
+          <div className="whitespace-pre-line font-medium leading-relaxed">{error}</div>
+          {isLogin && error.includes('KHÓA') && (
+            <button
+              type="button"
+              onClick={() => {
+                setIsLogin(false);
+                setError('');
+              }}
+              className="w-full mt-2 py-2.5 bg-gradient-to-r from-purple-600 to-indigo-600 hover:opacity-95 text-white rounded-xl font-black text-xs shadow-xs transition flex items-center justify-center gap-1.5"
+            >
+              <span>👉</span> Đăng Ký Tài Khoản Cho Sự Kiện Mới Ngay
+            </button>
+          )}
+        </div>
+      )}
+      {success && <div className="p-3 mb-4 text-xs text-green-700 bg-green-50 border border-green-200 rounded-xl font-semibold">{success}</div>}
 
       <form onSubmit={handleSubmit} className="space-y-4">
         {!isLogin && (
