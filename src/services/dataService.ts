@@ -1137,6 +1137,10 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
           const checkoutTimeMs = d.checkout_time ? safeParseTimestamp(d.checkout_time) : (d.checkoutTime ? safeParseTimestamp(d.checkoutTime) : undefined);
 
           // Auto-reconstruct user profile if missing from users list
+          const matchedUser = existingUsersMap.get(reconstructedUserId) || users.find(u => u.fullName && reconstructedName && u.fullName.trim().toLowerCase() === reconstructedName.trim().toLowerCase());
+          const resolvedEventId = d.event_id || d.eventId || matchedUser?.eventId || undefined;
+          const resolvedEventName = d.event_name || d.eventName || matchedUser?.eventName || undefined;
+
           if (reconstructedUserId && !existingUsersMap.has(reconstructedUserId)) {
             const reconstructedUser: User = {
               id: reconstructedUserId,
@@ -1145,8 +1149,8 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
               email: `${reconstructedName.toLowerCase().replace(/\s+/g, '')}@gmail.com`,
               phone: d.phone || '0000000000',
               department: d.department || 'Hậu cần',
-              eventId: d.event_id || d.eventId || '',
-              eventName: d.event_name || d.eventName || '',
+              eventId: resolvedEventId || '',
+              eventName: resolvedEventName || '',
               salaryRate: getDepartmentRate(d.department || 'Hậu cần'),
               createdAt: createdAtMs,
               updatedAt: Date.now(),
@@ -1162,8 +1166,8 @@ export async function fetchCheckins(userId?: string): Promise<Checkin[]> {
             userId: reconstructedUserId,
             fullName: reconstructedName,
             department: d.department || 'Hậu cần',
-            eventId: d.event_id || d.eventId || undefined,
-            eventName: d.event_name || d.eventName || undefined,
+            eventId: resolvedEventId,
+            eventName: resolvedEventName,
             workDate: d.work_date || d.workDate || format(new Date(createdAtMs), 'yyyy-MM-dd'),
             shiftName: d.shift_name || d.shiftName || 'Ca làm việc',
             otHours: Number(d.ot_hours || d.otHours) || 0,

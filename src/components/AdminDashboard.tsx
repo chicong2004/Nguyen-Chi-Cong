@@ -160,13 +160,15 @@ export default function AdminDashboard() {
         const targetEvtName = targetEvt?.name;
 
         const hasMatchingCheckin = checkins.some(c => 
-          (c.userId === u.id || (c.fullName && c.fullName.trim().toLowerCase() === u.fullName.trim().toLowerCase())) && (
+          (c.userId === u.id || (c.fullName && u.fullName && c.fullName.trim().toLowerCase() === u.fullName.trim().toLowerCase())) && (
             c.eventId === selectedEventFilter || 
-            (targetEvtName && c.eventName === targetEvtName)
+            (targetEvtName && c.eventName === targetEvtName) ||
+            (!c.eventId && !c.eventName && (u.eventId === selectedEventFilter || (targetEvtName && u.eventName === targetEvtName) || eventsList.length <= 1))
           )
         );
         const hasMatchingUserEvent = u.eventId === selectedEventFilter || 
-          (targetEvtName && u.eventName === targetEvtName);
+          (targetEvtName && u.eventName === targetEvtName) ||
+          (!u.eventId && !u.eventName && eventsList.length <= 1);
 
         matchesEvent = Boolean(hasMatchingCheckin || hasMatchingUserEvent);
       }
@@ -200,19 +202,32 @@ export default function AdminDashboard() {
       const hasMatchingCheckin = checkins.some(c => 
         (c.userId === u.id || (c.fullName && u.fullName && c.fullName.trim().toLowerCase() === u.fullName.trim().toLowerCase())) && (
           c.eventId === selectedEventFilter || 
-          (targetEvtName && c.eventName === targetEvtName)
+          (targetEvtName && c.eventName === targetEvtName) ||
+          (!c.eventId && !c.eventName && (u.eventId === selectedEventFilter || (targetEvtName && u.eventName === targetEvtName) || eventsList.length <= 1))
         )
       );
       const hasMatchingUserEvent = u.eventId === selectedEventFilter || 
-        (targetEvtName && u.eventName === targetEvtName);
+        (targetEvtName && u.eventName === targetEvtName) ||
+        (!u.eventId && !u.eventName && eventsList.length <= 1);
 
       return hasMatchingCheckin || hasMatchingUserEvent;
     });
 
-    const eventCheckins = checkins.filter(c => 
-      c.eventId === selectedEventFilter || 
-      (targetEvtName && c.eventName === targetEvtName)
-    );
+    const eventCheckins = checkins.filter(c => {
+      if (c.eventId === selectedEventFilter || (targetEvtName && c.eventName === targetEvtName)) {
+        return true;
+      }
+      if (!c.eventId && !c.eventName) {
+        const u = users.find(usr => usr.id === c.userId || (usr.fullName && c.fullName && usr.fullName.trim().toLowerCase() === c.fullName.trim().toLowerCase()));
+        if (u && (u.eventId === selectedEventFilter || (targetEvtName && u.eventName === targetEvtName))) {
+          return true;
+        }
+        if (eventsList.length <= 1) {
+          return true;
+        }
+      }
+      return false;
+    });
 
     const approvedCheckins = eventCheckins.filter(c => c.status === 'approved');
     const pendingCheckins = eventCheckins.filter(c => c.status === 'pending');
@@ -802,7 +817,18 @@ export default function AdminDashboard() {
                           if (selectedEventFilter !== 'all') {
                             const targetEvt = eventsList.find(e => e.id === selectedEventFilter);
                             const targetEvtName = targetEvt?.name;
-                            return c.eventId === selectedEventFilter || (targetEvtName && c.eventName === targetEvtName);
+                            if (c.eventId === selectedEventFilter || (targetEvtName && c.eventName === targetEvtName)) {
+                              return true;
+                            }
+                            if (!c.eventId && !c.eventName) {
+                              if (user.eventId === selectedEventFilter || (targetEvtName && user.eventName === targetEvtName)) {
+                                return true;
+                              }
+                              if (eventsList.length <= 1) {
+                                return true;
+                              }
+                            }
+                            return false;
                           }
                           return true;
                         }).sort((a, b) => b.createdAt - a.createdAt);

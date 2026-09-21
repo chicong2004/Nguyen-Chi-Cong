@@ -78,11 +78,21 @@ export default function AdminUserDetailModal({
     if (!selectedEventId || selectedEventId === 'all') return allUserCheckins;
     const targetEvt = events.find(e => e.id === selectedEventId);
     const targetName = targetEvt?.name || selectedEventName;
-    return allUserCheckins.filter(c => 
-      c.eventId === selectedEventId || 
-      (targetName && c.eventName === targetName)
-    );
-  }, [allUserCheckins, selectedEventId, selectedEventName, events]);
+    return allUserCheckins.filter(c => {
+      if (c.eventId === selectedEventId || (targetName && c.eventName === targetName)) {
+        return true;
+      }
+      if (!c.eventId && !c.eventName) {
+        if (user.eventId === selectedEventId || (targetName && user.eventName === targetName)) {
+          return true;
+        }
+        if (events.length <= 1) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }, [allUserCheckins, selectedEventId, selectedEventName, events, user]);
 
   const displayedCheckins = eventScope === 'current' && selectedEventId && selectedEventId !== 'all' 
     ? currentEventCheckins 

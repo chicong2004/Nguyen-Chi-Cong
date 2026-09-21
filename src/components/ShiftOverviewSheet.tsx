@@ -57,12 +57,22 @@ export default function ShiftOverviewSheet({ users, checkins, onClose, event, ev
   // Filter checkins for the selected event
   const scopedCheckins = useMemo(() => {
     if (!activeEvent) return checkins;
-    return checkins.filter(c => 
-      c.eventId === activeEvent.id || 
-      c.eventName === activeEvent.name || 
-      (!c.eventId && !c.eventName && eventsList.length === 1)
-    );
-  }, [checkins, activeEvent, eventsList]);
+    return checkins.filter(c => {
+      if (c.eventId === activeEvent.id || c.eventName === activeEvent.name) {
+        return true;
+      }
+      if (!c.eventId && !c.eventName) {
+        const u = users.find(usr => usr.id === c.userId || (usr.fullName && c.fullName && usr.fullName.trim().toLowerCase() === c.fullName.trim().toLowerCase()));
+        if (u && (u.eventId === activeEvent.id || u.eventName === activeEvent.name)) {
+          return true;
+        }
+        if (eventsList.length <= 1) {
+          return true;
+        }
+      }
+      return false;
+    });
+  }, [checkins, activeEvent, eventsList, users]);
 
   // Filter users relevant to this event
   const scopedUsers = useMemo(() => {
